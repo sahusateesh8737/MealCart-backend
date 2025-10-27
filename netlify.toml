@@ -1,0 +1,25 @@
+[build]
+  command = "npm install"
+  functions = "netlify/functions"
+  publish = "public"
+
+[dev]
+  command = "npm run dev"
+  port = 5000
+  targetPort = 5000
+
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/api"
+  status = 200
+
+# Cache headers
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    
+[[headers]]
+  for = "/api/health"
+  [headers.values]
+    Cache-Control = "public, max-age=60"

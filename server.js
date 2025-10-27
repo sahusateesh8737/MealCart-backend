@@ -122,6 +122,17 @@ app.get('/api/proxy/totalusers', async (req, res) => {
   }
 });
 
+// Root route
+app.get('/', (req, res) => {
+  res.status(200).json({ 
+    message: 'MealCart Backend API is running',
+    version: '1.0.0',
+    healthCheck: '/api/health',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
 // Health check route
 app.get('/api/health', (req, res) => {
   res.status(200).json({ 
