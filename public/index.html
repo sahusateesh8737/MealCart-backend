@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MealCart Backend API</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      max-width: 900px;
+      margin: 50px auto;
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #333;
+    }
+    .container {
+      background: white;
+      border-radius: 10px;
+      padding: 40px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+    h1 {
+      color: #667eea;
+      margin-bottom: 10px;
+    }
+    .status {
+      display: inline-block;
+      background: #4caf50;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 20px;
+      margin: 10px 0;
+      font-weight: bold;
+    }
+    .endpoints {
+      margin: 30px 0;
+      background: #f5f5f5;
+      padding: 20px;
+      border-radius: 8px;
+    }
+    .endpoint {
+      margin: 15px 0;
+      padding: 10px;
+      background: white;
+      border-left: 4px solid #667eea;
+      border-radius: 4px;
+    }
+    .method {
+      display: inline-block;
+      padding: 4px 8px;
+      background: #667eea;
+      color: white;
+      border-radius: 4px;
+      font-weight: bold;
+      margin-right: 10px;
+      min-width: 60px;
+      text-align: center;
+    }
+    code {
+      background: #f0f0f0;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Monaco', 'Menlo', monospace;
+    }
+    .info {
+      background: #e3f2fd;
+      border-left: 4px solid #2196f3;
+      padding: 15px;
+      border-radius: 4px;
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🍽️ MealCart Backend API</h1>
+    <p class="status">✓ Running on Netlify Functions</p>
+    
+    <div class="info">
+      <strong>ℹ️ Information:</strong><br>
+      This is the MealCart Backend API running on Netlify serverless functions.
+      Use the endpoints below to interact with the API.
+    </div>
+
+    <div class="endpoints">
+      <h2>📍 Available Endpoints</h2>
+      
+      <div class="endpoint">
+        <span class="method">GET</span>
+        <code>/api/health</code> - Health check
+      </div>
+
+      <div class="endpoint">
+        <span class="method">POST</span>
+        <code>/api/auth/signup</code> - User registration
+      </div>
+
+      <div class="endpoint">
+        <span class="method">POST</span>
+        <code>/api/auth/login</code> - User login
+      </div>
+
+      <div class="endpoint">
+        <span class="method">GET</span>
+        <code>/api/recipes</code> - Get all recipes
+      </div>
+
+      <div class="endpoint">
+        <span class="method">GET</span>
+        <code>/api/recipes-enhanced</code> - Get enhanced recipes
+      </div>
+
+      <div class="endpoint">
+        <span class="method">GET</span>
+        <code>/api/grocerylist</code> - Get grocery lists
+      </div>
+
+      <div class="endpoint">
+        <span class="method">POST</span>
+        <code>/api/gemini</code> - Gemini AI endpoint
+      </div>
+
+      <div class="endpoint">
+        <span class="method">POST</span>
+        <code>/api/ai</code> - AI endpoint
+      </div>
+    </div>
+
+    <div class="info">
+      <strong>🔗 Quick Links:</strong><br>
+      <a href="/api/health">Health Check</a> | 
+      <a href="https://github.com/sahusateesh8737/MealCart-backend">GitHub Repository</a>
+    </div>
+  </div>
+</body>
+</html>
