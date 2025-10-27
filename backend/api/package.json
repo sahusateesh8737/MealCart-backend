@@ -1,9 +1,0 @@
-{
-  "name": "mealcart-api",
-  "version": "1.0.0",
-  "description": "API handler for MealCart",
-  "main": "index.js",
-  "engines": {
-    "node": ">=18.x"
-  }
-}
