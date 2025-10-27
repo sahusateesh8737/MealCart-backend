@@ -1,4 +1,5 @@
 // netlify/functions/server.js - Netlify serverless function handler
+const serverless = require('serverless-http');
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -192,5 +193,24 @@ app.use('*', (req, res) => {
   });
 });
 
-// Export for Netlify
-module.exports = app;
+// Export for Netlify using serverless-http
+const handler = serverless(app);
+
+module.exports.handler = async (event, context) => {
+  // Important: Set this to allow connection pooling
+  context.callbackWaitsForEmptyEventLoop = false;
+  
+  try {
+    const result = await handler(event, context);
+    return result;
+  } catch (error) {
+    console.error('[Netlify Handler] Error:', error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ 
+        error: 'Internal server error',
+        message: error.message 
+      })
+    };
+  }
+};
