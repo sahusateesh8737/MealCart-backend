@@ -38,14 +38,26 @@ const corsOptions = {
       'http://localhost:3000'
     ];
     
-    // Allow requests with no origin (like mobile apps, curl, etc)
+    console.log('[CORS] Request origin:', origin || 'no-origin');
+    
+    // Allow requests with no origin (like mobile apps, curl, Postman, etc)
     if (!origin) {
+      console.log('[CORS] Allowing request with no origin (mobile/native app)');
       return callback(null, true);
     }
     
-    if (allowedOrigins.indexOf(origin) !== -1 || origin.includes('localhost')) {
+    // Allow localhost with any port (for mobile device testing on local network)
+    if (origin.includes('localhost') || origin.includes('127.0.0.1') || origin.includes('192.168.')) {
+      console.log('[CORS] Allowing localhost/local network origin');
+      return callback(null, true);
+    }
+    
+    // Check against allowed origins
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      console.log('[CORS] Allowing whitelisted origin');
       callback(null, true);
     } else {
+      console.log('[CORS] Allowing origin (permissive mode for Netlify)');
       callback(null, true); // Allow all for Netlify
     }
   },

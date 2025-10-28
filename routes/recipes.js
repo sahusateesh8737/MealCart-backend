@@ -6,6 +6,41 @@ const { logger } = require('../utils/logger');
 
 const router = express.Router();
 
+// Debug endpoint - Get saved recipes for logged-in user (simpler version)
+router.get('/my-recipes', auth, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    
+    console.log('[My Recipes] Request from user:', userId.toString());
+    console.log('[My Recipes] Request headers:', {
+      origin: req.headers.origin,
+      userAgent: req.headers['user-agent'],
+      authorization: req.headers.authorization ? 'Present' : 'Missing'
+    });
+
+    const recipes = await Recipe.find({ userId })
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .populate('userId', 'username email');
+
+    console.log('[My Recipes] Found recipes:', recipes.length);
+
+    res.json({
+      success: true,
+      count: recipes.length,
+      recipes,
+      userId: userId.toString()
+    });
+  } catch (error) {
+    console.error('[My Recipes] Error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error while fetching recipes',
+      error: error.message
+    });
+  }
+});
+
 // Search recipes using external Food API (Spoonacular) - Updated to use controller
 router.get('/search', searchRecipes);
 
@@ -163,9 +198,20 @@ router.get('/saved/:userId', auth, async (req, res) => {
     const { userId } = req.params;
     const { page = 1, limit = 10, sortBy = 'createdAt', order = 'desc' } = req.query;
 
+    console.log('[Saved Recipes] Request:', {
+      paramUserId: userId,
+      authUserId: req.user._id.toString(),
+      page,
+      limit,
+      origin: req.headers.origin,
+      userAgent: req.headers['user-agent']
+    });
+
     // Ensure user can only access their own recipes
     if (userId !== req.user._id.toString()) {
+      console.warn('[Saved Recipes] Access denied - userId mismatch');
       return res.status(403).json({ 
+        success: false,
         message: 'Access denied. You can only view your own recipes.',
         error: 'ACCESS_DENIED'
       });
@@ -182,7 +228,14 @@ router.get('/saved/:userId', auth, async (req, res) => {
 
     const totalRecipes = await Recipe.countDocuments({ userId });
 
+    console.log('[Saved Recipes] Found:', {
+      totalRecipes,
+      returnedCount: recipes.length,
+      page: parseInt(page)
+    });
+
     res.json({
+      success: true,
       recipes,
       pagination: {
         currentPage: parseInt(page),
@@ -195,8 +248,10 @@ router.get('/saved/:userId', auth, async (req, res) => {
   } catch (error) {
     console.error('Get saved recipes error:', error);
     res.status(500).json({ 
+      success: false,
       message: 'Server error while fetching saved recipes',
-      error: 'INTERNAL_SERVER_ERROR'
+      error: 'INTERNAL_SERVER_ERROR',
+      details: error.message
     });
   }
 });
