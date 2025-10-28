@@ -4,7 +4,6 @@ const recipeSchema = new mongoose.Schema({
   externalId: {
     type: String,
     required: true,
-    unique: true,
     index: true
   },
   name: {
@@ -128,6 +127,8 @@ const recipeSchema = new mongoose.Schema({
 // Compound index for user-specific queries
 recipeSchema.index({ userId: 1, createdAt: -1 });
 recipeSchema.index({ userId: 1, name: 'text' });
+// Unique index for user + externalId combination (same recipe can be saved by different users)
+recipeSchema.index({ userId: 1, externalId: 1 }, { unique: true });
 
 // Instance method to increment times cooked
 recipeSchema.methods.markAsCooked = function() {
