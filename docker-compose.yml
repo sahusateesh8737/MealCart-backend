@@ -1,26 +1,63 @@
 version: '3.8'
 
 services:
+  # Main application service
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mealcart-api
     ports:
-      - "5000:5000"
-    environment:
-      - NODE_ENV=production
-      - MONGODB_URI=mongodb://mongo:27017/mealcart
+      - "5001:5000"  # Host port 5001 maps to container port 5000
     env_file:
-      - .env
-    depends_on:
-      - mongo
+      - .env.docker  # Use Docker-specific env file with PORT=5000
+    environment:
+      - NODE_ENV=development
+      - PORT=5000  # Override PORT to 5000 inside container
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - mealcart-network
 
-  mongo:
-    image: mongo:7
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo-data:/data/db
-    restart: unless-stopped
+  # Local MongoDB (Optional - only if not using Atlas)
+  # Uncomment this section if you want to use local MongoDB
+  # mongo:
+  #   image: mongo:7
+  #   container_name: mealcart-mongo
+  #   ports:
+  #     - "27017:27017"
+  #   volumes:
+  #     - mongo-data:/data/db
+  #   environment:
+  #     - MONGO_INITDB_DATABASE=mealcart
+  #   restart: unless-stopped
+  #   networks:
+  #     - mealcart-network
+
+  # MongoDB Admin UI (Optional)
+  # mongo-express:
+  #   image: mongo-express:latest
+  #   container_name: mealcart-mongo-ui
+  #   ports:
+  #     - "8081:8081"
+  #   environment:
+  #     - ME_CONFIG_MONGODB_URL=mongodb://mongo:27017/
+  #     - ME_CONFIG_BASICAUTH_USERNAME=admin
+  #     - ME_CONFIG_BASICAUTH_PASSWORD=admin123
+  #   depends_on:
+  #     - mongo
+  #   restart: unless-stopped
+  #   networks:
+  #     - mealcart-network
+
+networks:
+  mealcart-network:
+    driver: bridge
 
 volumes:
   mongo-data:
