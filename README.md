@@ -1,203 +1,277 @@
 # MealCart Backend API
 
-A comprehensive backend API for the MealCart application - an AI-powered recipe generator and grocery list manager built with the MERN stack.
+[![CI/CD](https://github.com/sahusateesh8737/MealCart-backend/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/sahusateesh8737/MealCart-backend/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Features
+> **Production-grade backend API for MealCart** - An AI-powered recipe generator and grocery list manager built with the MERN stack.
 
-- **User Authentication**: JWT-based authentication with secure password hashing
-- **Recipe Management**: Search, save, and organize recipes from external APIs
-- **Grocery List Generation**: Intelligent grocery list creation from selected recipes
-- **AI Integration**: Gemini AI for recipe suggestions and cooking assistance
-- **External API Integration**: Spoonacular API for recipe search
+## 🚀 Features
 
-## Tech Stack
+- **🔐 Authentication**: JWT-based authentication with secure password hashing
+- **📝 Recipe Management**: Search, save, and organize recipes from multiple sources
+- **🤖 AI Integration**: Gemini AI for intelligent recipe generation and suggestions
+- **🛒 Grocery Lists**: Smart grocery list generation from selected recipes
+- **🔒 Security**: Rate limiting, helmet, CORS, input sanitization
+- **📊 Database**: MongoDB with connection pooling and retry logic
+- **🐳 Docker Ready**: Multi-stage Docker builds for development and production
+- **⚡ Performance**: Optimized for serverless and traditional deployments
+- **📈 Monitoring**: Structured logging and health check endpoints
 
-- **Node.js** & **Express.js** - Server framework
-- **MongoDB** & **Mongoose** - Database and ODM
-- **JWT** - Authentication
-- **bcryptjs** - Password hashing
-- **Google Generative AI** - AI assistance
-- **Spoonacular API** - Recipe data
-
-## Project Structure
+## 🏗️ Architecture
 
 ```
-backend/
-├── models/
-│   ├── User.js          # User schema and methods
-│   └── Recipe.js        # Recipe schema and methods
-├── routes/
-│   ├── auth.js          # Authentication routes
-│   ├── recipes.js       # Recipe management routes
-│   ├── grocerylist.js   # Grocery list generation routes
-│   └── gemini.js        # AI assistance routes
-├── middleware/
-│   └── auth.js          # JWT authentication middleware
-├── server.js            # Main server file
-├── package.json         # Dependencies and scripts
-└── .env                 # Environment variables
+├── config/              # Configuration management
+│   ├── index.js        # Central configuration
+│   └── database.js     # Database connection manager
+├── middleware/         # Express middleware
+│   ├── auth.js         # JWT authentication
+│   ├── errorHandler.js # Global error handling
+│   ├── security.js     # Security middleware
+│   ├── validator.js    # Request validation
+│   ├── cors.js         # CORS configuration
+│   └── logging.js      # Request logging
+├── models/             # Mongoose schemas
+│   ├── User.js        # User model with authentication
+│   └── Recipe.js      # Recipe model with indexing
+├── routes/             # API route handlers
+│   ├── auth.js        # Authentication endpoints
+│   ├── users.js       # User management
+│   ├── recipes.js     # Recipe operations
+│   ├── ai.js          # AI-powered features
+│   ├── gemini.js      # Gemini AI integration
+│   └── grocerylist.js # Grocery list generation
+├── controllers/        # Business logic
+├── services/          # External service integrations
+├── utils/             # Utility functions
+├── app.js             # Express app configuration
+└── server.js          # Server entry point
 ```
 
-## Installation
+## 🛠️ Tech Stack
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd MealCart/backend
-   ```
+- **Runtime**: Node.js 18+
+- **Framework**: Express.js
+- **Database**: MongoDB with Mongoose ODM
+- **Authentication**: JWT + bcryptjs
+- **AI**: Google Gemini API
+- **External APIs**: Spoonacular, Unsplash
+- **Security**: Helmet, Rate Limit, Mongo Sanitize
+- **DevOps**: Docker, Docker Compose, GitHub Actions
 
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
+## 📦 Installation
 
-3. **Set up environment variables**
-   Copy `.env.example` to `.env` and configure:
-   ```env
-   MONGODB_URI=mongodb://localhost:27017/mealcart
-   JWT_SECRET=your_super_secure_jwt_secret_key_here
-   PORT=5000
-   SPOONACULAR_API_KEY=your_spoonacular_api_key_here
-   GEMINI_API_KEY=your_gemini_api_key_here
-   NODE_ENV=development
-   ```
+### Prerequisites
 
-4. **Start the server**
-   ```bash
-   # Development mode with nodemon
-   npm run dev
-   
-   # Production mode
-   npm start
-   ```
+- Node.js 18+ and npm
+- MongoDB 7+ (local or cloud)
+- API Keys (Gemini, Spoonacular, Unsplash)
 
-## API Endpoints
-
-### Authentication (`/api/auth`)
-
-- `POST /register` - Register new user
-- `POST /login` - User login
-- `GET /me` - Get current user info
-
-### Recipes (`/api/recipes`)
-
-- `GET /search` - Search recipes by ingredients
-- `POST /save` - Save recipe to user's collection
-- `GET /saved/:userId` - Get user's saved recipes
-- `DELETE /delete/:userId/:recipeId` - Delete saved recipe
-- `GET /saved/search/:userId` - Search saved recipes
-- `PATCH /update/:recipeId` - Update recipe (rating, notes, favorite)
-- `POST /cooked/:recipeId` - Mark recipe as cooked
-
-### Grocery List (`/api/grocerylist`)
-
-- `POST /generate` - Generate grocery list from recipes
-- `GET /history` - Get grocery list history
-- `POST /save` - Save grocery list
-
-### AI Assistance (`/api/gemini`)
-
-- `POST /suggest` - Get AI suggestions for cooking
-- `POST /analyze-recipe` - Analyze recipe details
-- `POST /meal-plan` - Generate meal plans
-
-## Environment Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `MONGODB_URI` | MongoDB connection string | Yes |
-| `JWT_SECRET` | Secret key for JWT tokens | Yes |
-| `PORT` | Server port (default: 5000) | No |
-| `SPOONACULAR_API_KEY` | Spoonacular API key | Yes |
-| `GEMINI_API_KEY` | Google Gemini API key | Yes |
-| `NODE_ENV` | Environment (development/production) | No |
-| `FRONTEND_URL` | Frontend URL for CORS | No |
-
-## API Keys Setup
-
-1. **Spoonacular API**:
-   - Sign up at [Spoonacular](https://spoonacular.com/food-api)
-   - Get your API key from the dashboard
-   - Add to `.env` as `SPOONACULAR_API_KEY`
-
-2. **Google Gemini API**:
-   - Go to [Google AI Studio](https://makersuite.google.com/app/apikey)
-   - Create a new API key
-   - Add to `.env` as `GEMINI_API_KEY`
-
-## Database Models
-
-### User Model
-- `username` - Unique username
-- `email` - Unique email address
-- `password` - Hashed password
-- `preferences` - Dietary restrictions and preferences
-- `createdAt` - Account creation timestamp
-
-### Recipe Model
-- `externalId` - External API recipe ID
-- `name` - Recipe name
-- `ingredients` - Array of ingredient objects
-- `instructions` - Cooking instructions
-- `userId` - Reference to user who saved it
-- `nutrition` - Nutritional information
-- `rating` - User rating (1-5)
-- `notes` - User notes
-- `timesCooked` - Usage tracking
-
-## Security Features
-
-- Password hashing with bcryptjs (cost factor 12)
-- JWT token-based authentication
-- Protected routes with authentication middleware
-- Input validation and sanitization
-- CORS configuration
-- Error handling middleware
-
-## Development
-
-### Scripts
+### Local Development
 
 ```bash
-npm start       # Start production server
-npm run dev     # Start development server with nodemon
-npm test        # Run tests (to be implemented)
+# Clone the repository
+git clone https://github.com/sahusateesh8737/MealCart-backend.git
+cd MealCart-backend
+
+# Install dependencies
+npm install
+
+# Copy environment variables
+cp .env.example .env
+
+# Edit .env with your configuration
+nano .env
+
+# Start development server
+npm run dev
 ```
 
-### Adding New Routes
+### Docker Development
 
-1. Create route file in `routes/` directory
-2. Implement route handlers with proper error handling
-3. Add authentication middleware where needed
-4. Import and use in `server.js`
+```bash
+# Start all services (app + MongoDB + Mongo Express)
+docker-compose up
 
-### Database Operations
+# Or build and run in detached mode
+docker-compose up -d --build
 
-- Use Mongoose for all database operations
-- Implement proper error handling
-- Add validation at schema level
-- Use indexes for performance optimization
+# View logs
+docker-compose logs -f app
 
-## Error Handling
-
-The API uses consistent error response format:
-
-```json
-{
-  "message": "Human-readable error message",
-  "error": "ERROR_CODE",
-  "details": "Additional error details (development only)"
-}
+# Stop services
+docker-compose down
 ```
 
-## Contributing
+## ⚙️ Configuration
 
-1. Follow the existing code structure
-2. Add proper error handling
-3. Include input validation
-4. Write clear commit messages
-5. Test your changes thoroughly
+Create a `.env` file in the root directory:
 
-## License
+```env
+# Server
+NODE_ENV=development
+PORT=5000
 
-MIT License - see LICENSE file for details
+# Database
+MONGODB_URI=mongodb://localhost:27017/mealcart
+
+# Authentication
+JWT_SECRET=your-super-secret-jwt-key-minimum-32-characters
+
+# APIs
+GEMINI_API_KEY=your_gemini_key
+SPOONACULAR_API_KEY=your_spoonacular_key
+UNSPLASH_ACCESS_KEY=your_unsplash_key
+
+# Frontend
+FRONTEND_URL=http://localhost:5173
+```
+
+## 🚀 Deployment
+
+### Docker Production Build
+
+```bash
+# Build production image
+docker build -t mealcart-backend:latest --target production .
+
+# Run production container
+docker run -p 5000:5000 --env-file .env mealcart-backend:latest
+```
+
+### Cloud Platforms
+
+#### Vercel/Netlify (Serverless)
+- Configure environment variables in platform dashboard
+- Deploy directly from GitHub
+- Auto-scales based on traffic
+
+#### AWS ECS / Google Cloud Run
+```bash
+# Build and push to registry
+docker build -t your-registry/mealcart-backend:latest .
+docker push your-registry/mealcart-backend:latest
+
+# Deploy to your cloud platform
+# Follow platform-specific deployment guides
+```
+
+#### DigitalOcean App Platform
+- Connect GitHub repository
+- Set environment variables
+- Configure build and run commands
+- Auto-deploy on push
+
+## 📡 API Endpoints
+
+### Health Check
+```http
+GET /health
+```
+
+### Authentication
+```http
+POST /api/auth/register      # Register new user
+POST /api/auth/login         # Login user
+```
+
+### Users
+```http
+GET    /api/users/profile    # Get user profile (auth required)
+PUT    /api/users/profile    # Update profile (auth required)
+```
+
+### Recipes
+```http
+GET    /api/recipes/search              # Search recipes
+POST   /api/recipes/save                # Save recipe (auth required)
+GET    /api/recipes/my-recipes          # Get user's recipes (auth required)
+DELETE /api/recipes/:id                 # Delete recipe (auth required)
+```
+
+### AI Features
+```http
+POST /api/ai/generate-recipe            # Generate recipe with AI (auth required)
+POST /api/gemini/suggest                # Get AI suggestions (auth required)
+```
+
+### Grocery Lists
+```http
+POST /api/grocerylist/generate          # Generate grocery list (auth required)
+```
+
+## 🧪 Testing
+
+```bash
+# Run tests
+npm test
+
+# Run tests with coverage
+npm test -- --coverage
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run linter
+npm run lint
+
+# Fix linting issues
+npm run lint:fix
+```
+
+## 📝 Scripts
+
+```bash
+npm start           # Start production server
+npm run dev         # Start development server with nodemon
+npm run dev:debug   # Start with debug logging
+npm test            # Run tests
+npm run lint        # Run ESLint
+npm run lint:fix    # Fix ESLint issues
+npm run format      # Format code with Prettier
+npm run audit       # Run security audit
+npm run docker:build # Build Docker image
+npm run docker:run  # Run Docker container
+```
+
+## 🔒 Security
+
+- **Authentication**: JWT tokens with secure secret
+- **Password Hashing**: bcrypt with salt rounds
+- **Rate Limiting**: Prevents brute force attacks
+- **Input Validation**: Sanitizes all user inputs
+- **MongoDB Injection**: Protection against NoSQL injection
+- **CORS**: Configured for specific origins
+- **Helmet**: Sets secure HTTP headers
+- **Environment Variables**: Sensitive data in .env files
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 👤 Author
+
+**Satish Sahu**
+- GitHub: [@sahusateesh8737](https://github.com/sahusateesh8737)
+
+## 🙏 Acknowledgments
+
+- Google Gemini AI for intelligent recipe generation
+- Spoonacular API for recipe data
+- Unsplash API for high-quality food images
+- MongoDB team for excellent database tools
+
+## 📞 Support
+
+For support, email your-email@example.com or open an issue in the GitHub repository.
+
+---
+
+**Made with ❤️ by Satish Sahu**
