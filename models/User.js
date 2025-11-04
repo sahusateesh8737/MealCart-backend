@@ -80,7 +80,7 @@ const userSchema = new mongoose.Schema({
     amount: { type: Number, default: 1 },
     unit: { type: String, default: 'item' },
     expirationDate: { type: Date },
-    category: { type: String, enum: ['produce', 'dairy', 'meat', 'pantry', 'frozen'], default: 'pantry' }
+    category: { type: String, default: 'pantry' }
   }],
   following: [{
     type: mongoose.Schema.Types.ObjectId,

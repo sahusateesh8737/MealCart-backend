@@ -732,6 +732,46 @@ router.post('/pantry', auth, async (req, res) => {
   }
 });
 
+// PUT /api/users/pantry/:itemId - Update pantry item
+router.put('/pantry/:itemId', auth, async (req, res) => {
+  try {
+    const { name, amount, unit, expirationDate, category } = req.body;
+
+    const user = await User.findById(req.user.id);
+    const item = user.pantry.id(req.params.itemId);
+
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        message: 'Pantry item not found'
+      });
+    }
+
+    if (name !== undefined) item.name = name;
+    if (amount !== undefined) item.amount = amount;
+    if (unit !== undefined) item.unit = unit;
+    if (expirationDate !== undefined) {
+      item.expirationDate = expirationDate ? new Date(expirationDate) : null;
+    }
+    if (category !== undefined) item.category = category;
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Pantry item updated',
+      data: item
+    });
+  } catch (error) {
+    console.error('Error updating pantry item:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating pantry item',
+      error: error.message
+    });
+  }
+});
+
 // DELETE /api/users/pantry/:itemId - Remove item from pantry
 router.delete('/pantry/:itemId', auth, async (req, res) => {
   try {
