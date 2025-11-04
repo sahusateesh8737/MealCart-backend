@@ -1,5 +1,6 @@
 const express = require('express');
 const Recipe = require('../models/Recipe');
+const User = require('../models/User');
 const { auth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -190,6 +191,296 @@ function generateShoppingTips(groceryList) {
 
   return tips;
 }
+
+// Get grocery list history for a user
+router.get('/history', auth, async (req, res) => {
+  try {
+    // This is a placeholder for grocery list history functionality
+    // In a full implementation, you might want to store grocery lists in a separate collection
+    res.json({
+      message: 'Grocery list history feature coming soon',
+      history: []
+    });
+  } catch (error) {
+    console.error('Get grocery list history error:', error);
+    res.status(500).json({ 
+      message: 'Server error while fetching grocery list history',
+      error: 'INTERNAL_SERVER_ERROR'
+    });
+  }
+});
+
+// Get user's current grocery list
+router.get('/', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('groceryList');
+    
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'User not found',
+        error: 'USER_NOT_FOUND'
+      });
+    }
+
+    res.json({
+      success: true,
+      groceryList: user.groceryList || [],
+      itemCount: user.groceryList ? user.groceryList.length : 0
+    });
+  } catch (error) {
+    console.error('Get grocery list error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error while fetching grocery list',
+      error: 'INTERNAL_SERVER_ERROR'
+    });
+  }
+});
+
+// Add item to grocery list
+router.post('/item', auth, async (req, res) => {
+  try {
+    const { name, amount, unit, category, checked = false } = req.body;
+
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Item name is required',
+        error: 'MISSING_ITEM_NAME'
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+    
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'User not found',
+        error: 'USER_NOT_FOUND'
+      });
+    }
+
+    // Initialize groceryList if it doesn't exist
+    if (!user.groceryList) {
+      user.groceryList = [];
+    }
+
+    // Create new item
+    const newItem = {
+      _id: new Date().getTime().toString(), // Simple ID generation
+      name: name.trim(),
+      amount: amount || '1',
+      unit: unit || '',
+      category: category || categorizeIngredient(name),
+      checked: checked,
+      addedAt: new Date()
+    };
+
+    user.groceryList.push(newItem);
+    await user.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Item added to grocery list',
+      item: newItem,
+      groceryList: user.groceryList
+    });
+  } catch (error) {
+    console.error('Add grocery list item error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error while adding item to grocery list',
+      error: 'INTERNAL_SERVER_ERROR'
+    });
+  }
+});
+
+// Update grocery list item
+router.put('/item/:itemId', auth, async (req, res) => {
+  try {
+    const { itemId } = req.params;
+    const { name, amount, unit, category, checked } = req.body;
+
+    const user = await User.findById(req.user._id);
+    
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'User not found',
+        error: 'USER_NOT_FOUND'
+      });
+    }
+
+    if (!user.groceryList) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Grocery list is empty',
+        error: 'EMPTY_GROCERY_LIST'
+      });
+    }
+
+    const itemIndex = user.groceryList.findIndex(item => item._id === itemId);
+    
+    if (itemIndex === -1) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Item not found in grocery list',
+        error: 'ITEM_NOT_FOUND'
+      });
+    }
+
+    // Update item fields
+    if (name !== undefined) user.groceryList[itemIndex].name = name.trim();
+    if (amount !== undefined) user.groceryList[itemIndex].amount = amount;
+    if (unit !== undefined) user.groceryList[itemIndex].unit = unit;
+    if (category !== undefined) user.groceryList[itemIndex].category = category;
+    if (checked !== undefined) user.groceryList[itemIndex].checked = checked;
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Item updated successfully',
+      item: user.groceryList[itemIndex],
+      groceryList: user.groceryList
+    });
+  } catch (error) {
+    console.error('Update grocery list item error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error while updating item',
+      error: 'INTERNAL_SERVER_ERROR'
+    });
+  }
+});
+
+// Delete grocery list item
+router.delete('/item/:itemId', auth, async (req, res) => {
+  try {
+    const { itemId } = req.params;
+
+    const user = await User.findById(req.user._id);
+    
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'User not found',
+        error: 'USER_NOT_FOUND'
+      });
+    }
+
+    if (!user.groceryList) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Grocery list is empty',
+        error: 'EMPTY_GROCERY_LIST'
+      });
+    }
+
+    const itemIndex = user.groceryList.findIndex(item => item._id === itemId);
+    
+    if (itemIndex === -1) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Item not found in grocery list',
+        error: 'ITEM_NOT_FOUND'
+      });
+    }
+
+    user.groceryList.splice(itemIndex, 1);
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Item deleted successfully',
+      groceryList: user.groceryList
+    });
+  } catch (error) {
+    console.error('Delete grocery list item error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error while deleting item',
+      error: 'INTERNAL_SERVER_ERROR'
+    });
+  }
+});
+
+// Clear all checked items
+router.delete('/checked', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'User not found',
+        error: 'USER_NOT_FOUND'
+      });
+    }
+
+    if (!user.groceryList) {
+      return res.json({
+        success: true,
+        message: 'Grocery list is already empty',
+        groceryList: []
+      });
+    }
+
+    const initialCount = user.groceryList.length;
+    user.groceryList = user.groceryList.filter(item => !item.checked);
+    await user.save();
+
+    const deletedCount = initialCount - user.groceryList.length;
+
+    res.json({
+      success: true,
+      message: `${deletedCount} checked item(s) removed`,
+      groceryList: user.groceryList,
+      deletedCount
+    });
+  } catch (error) {
+    console.error('Clear checked items error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error while clearing checked items',
+      error: 'INTERNAL_SERVER_ERROR'
+    });
+  }
+});
+
+// Clear entire grocery list
+router.delete('/clear', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'User not found',
+        error: 'USER_NOT_FOUND'
+      });
+    }
+
+    const itemCount = user.groceryList ? user.groceryList.length : 0;
+    user.groceryList = [];
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Grocery list cleared',
+      deletedCount: itemCount,
+      groceryList: []
+    });
+  } catch (error) {
+    console.error('Clear grocery list error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error while clearing grocery list',
+      error: 'INTERNAL_SERVER_ERROR'
+    });
+  }
+});
 
 // Get grocery list history for a user
 router.get('/history', auth, async (req, res) => {

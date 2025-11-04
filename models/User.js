@@ -66,6 +66,15 @@ const userSchema = new mongoose.Schema({
     completed: { type: Boolean, default: false },
     category: { type: String, enum: ['produce', 'dairy', 'meat', 'pantry', 'frozen', 'other'], default: 'other' }
   }],
+  groceryList: [{
+    _id: { type: String },
+    name: { type: String, required: true },
+    amount: { type: String, default: '1' },
+    unit: { type: String, default: '' },
+    category: { type: String, default: 'Other' },
+    checked: { type: Boolean, default: false },
+    addedAt: { type: Date, default: Date.now }
+  }],
   pantry: [{
     name: { type: String, required: true },
     amount: { type: Number, default: 1 },
