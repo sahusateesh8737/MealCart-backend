@@ -166,9 +166,19 @@ router.get('/favorites', auth, async (req, res) => {
     const limit = parseInt(req.query.limit) || 12;
     const skip = (page - 1) * limit;
 
+    console.log('[Favorites] GET Request:', {
+      userId: req.user.id,
+      page,
+      limit,
+      skip,
+      origin: req.headers.origin,
+      userAgent: req.headers['user-agent']?.substring(0, 50)
+    });
+
     const user = await User.findById(req.user.id);
     
     if (!user) {
+      console.log('[Favorites] User not found:', req.user.id);
       return res.status(404).json({
         success: false,
         message: 'User not found'
@@ -177,6 +187,12 @@ router.get('/favorites', auth, async (req, res) => {
 
     // Get total count before pagination
     const totalFavorites = user.favoriteRecipes ? user.favoriteRecipes.length : 0;
+    
+    console.log('[Favorites] User has favorite IDs:', {
+      userId: req.user.id,
+      totalFavorites,
+      favoriteIds: user.favoriteRecipes ? user.favoriteRecipes.slice(0, 5).map(id => id.toString()) : []
+    });
 
     // Populate favorites with pagination
     await user.populate({
@@ -190,19 +206,39 @@ router.get('/favorites', auth, async (req, res) => {
       }
     });
 
-    res.json({
+    const populatedRecipes = user.favoriteRecipes || [];
+    console.log('[Favorites] Populated recipes:', {
+      userId: req.user.id,
+      populatedCount: populatedRecipes.length,
+      recipeNames: populatedRecipes.slice(0, 3).map(r => r?.name || 'unnamed')
+    });
+
+    const response = {
       success: true,
       data: {
-        recipes: user.favoriteRecipes || [],
+        recipes: populatedRecipes,
         pagination: {
           currentPage: page,
           totalPages: Math.ceil(totalFavorites / limit),
-          totalRecipes: totalFavorites
+          totalRecipes: totalFavorites,
+          limit: limit
         }
       }
+    };
+
+    console.log('[Favorites] Sending response:', {
+      userId: req.user.id,
+      recipesCount: response.data.recipes.length,
+      paginationInfo: response.data.pagination
     });
+
+    res.json(response);
   } catch (error) {
-    console.error('Error fetching favorites:', error);
+    console.error('[Favorites] Error:', {
+      userId: req.user?.id,
+      error: error.message,
+      stack: error.stack?.substring(0, 200)
+    });
     res.status(500).json({
       success: false,
       message: 'Error fetching favorites',
@@ -581,6 +617,47 @@ router.post('/meal-plan', auth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error updating meal plan',
+      error: error.message
+    });
+  }
+});
+
+// DELETE /api/users/meal-plan/:planId - Delete meal plan entry
+router.delete('/meal-plan/:planId', auth, async (req, res) => {
+  try {
+    const { planId } = req.params;
+
+    const user = await User.findById(req.user.id);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Find and remove the meal plan entry
+    const mealPlanEntry = user.mealPlan.id(planId);
+    
+    if (!mealPlanEntry) {
+      return res.status(404).json({
+        success: false,
+        message: 'Meal plan entry not found'
+      });
+    }
+
+    user.mealPlan.pull(planId);
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Meal plan entry deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting meal plan entry:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting meal plan entry',
       error: error.message
     });
   }

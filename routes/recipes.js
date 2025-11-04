@@ -50,81 +50,8 @@ router.get('/search-by-ingredients', searchRecipes);
 // Get trending/popular recipes
 router.get('/trending', getTrendingRecipes);
 
-// GET /api/recipes/favorites - Get user's favorite recipes (alias to /api/users/favorites)
-router.get('/favorites', auth, async (req, res) => {
-  try {
-    console.log('[Favorites] Request from user:', req.user._id || req.user.id);
-    
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
-    const skip = (page - 1) * limit;
-
-    // Get user from database
-    const User = require('../models/User');
-    const userId = req.user._id || req.user.id;
-    const user = await User.findById(userId);
-
-    if (!user) {
-      console.log('[Favorites] User not found:', userId);
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-
-    // Get total count of favorites
-    const totalFavorites = user.favoriteRecipes ? user.favoriteRecipes.length : 0;
-
-    console.log(`[Favorites] User ${userId} has ${totalFavorites} favorite recipe IDs:`, user.favoriteRecipes);
-
-    // If no favorites, return empty array
-    if (totalFavorites === 0) {
-      console.log('[Favorites] No favorites found, returning empty array');
-      return res.json({
-        success: true,
-        recipes: [],
-        pagination: {
-          page,
-          limit,
-          totalPages: 0,
-          totalRecipes: 0
-        }
-      });
-    }
-
-    // Populate favorites with pagination - be explicit to avoid auto-populate issues
-    await user.populate({
-      path: 'favoriteRecipes',
-      select: '-__v', // Exclude version key
-      options: {
-        skip,
-        limit,
-        sort: { createdAt: -1 },
-        strictPopulate: false // Allow flexible population
-      }
-    });
-
-    console.log(`[Favorites] Populated ${user.favoriteRecipes.length} recipes`);
-
-    res.json({
-      success: true,
-      recipes: user.favoriteRecipes || [],
-      pagination: {
-        page,
-        limit,
-        totalPages: Math.ceil(totalFavorites / limit),
-        totalRecipes: totalFavorites
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching favorite recipes:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching favorite recipes',
-      error: error.message
-    });
-  }
-});
+// REMOVED: Duplicate favorites endpoint - use /api/users/favorites instead
+// This duplicate was causing response conflicts with the main favorites endpoint in users.js
 
 // POST /api/recipes - Create/save a new recipe (alias to /save for frontend compatibility)
 router.post('/', auth, async (req, res) => {
