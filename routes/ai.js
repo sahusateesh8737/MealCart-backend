@@ -688,4 +688,125 @@ router.post('/save', auth, async (req, res) => {
   return recipeController.saveRecipe(req, res);
 });
 
+// POST /api/ai/chat - AI Chatbot endpoint (alias to /api/gemini/chat for frontend compatibility)
+router.post('/chat', auth, async (req, res) => {
+  try {
+    const { message, conversationHistory = [] } = req.body;
+
+    if (!message || typeof message !== 'string' || message.trim().length === 0) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Message is required and must be a non-empty string',
+        error: 'MISSING_MESSAGE'
+      });
+    }
+
+    if (!genAI) {
+      console.warn('[AI] Gemini AI not initialized - check GEMINI_API_KEY');
+      return res.status(503).json({
+        success: false,
+        message: 'AI service not available',
+        error: 'GEMINI_NOT_INITIALIZED'
+      });
+    }
+
+    // Get the generative model with fallback
+    let model;
+    try {
+      model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    } catch (modelError) {
+      console.error('Error with gemini-2.0-flash, trying gemini-1.5-flash:', modelError);
+      try {
+        model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      } catch (fallbackError) {
+        console.error('Error with gemini-1.5-flash:', fallbackError);
+        return res.status(500).json({ 
+          success: false,
+          message: 'Failed to initialize AI model',
+          error: 'MODEL_INITIALIZATION_ERROR'
+        });
+      }
+    }
+
+    // Build conversation context
+    let conversationContext = `You are MealCart AI Assistant, a friendly and knowledgeable cooking expert. You help users with:
+- Recipe recommendations and modifications
+- Cooking techniques and tips
+- Ingredient substitutions
+- Meal planning and preparation
+- Nutritional advice
+- Dietary restrictions and preferences
+- Grocery shopping suggestions
+- Food safety and storage
+
+Be conversational, helpful, and concise. If the question is not related to cooking or food, politely redirect to food-related topics.
+
+`;
+
+    // Add conversation history if provided
+    if (conversationHistory.length > 0) {
+      conversationContext += '\nConversation history:\n';
+      conversationHistory.slice(-5).forEach(msg => {
+        conversationContext += `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}\n`;
+      });
+      conversationContext += '\n';
+    }
+
+    // Add current user message
+    conversationContext += `Current user message: ${message.trim()}\n\nPlease respond in a friendly, helpful manner:`;
+
+    // Generate response with retry logic
+    const text = await callAIWithRetry(model, conversationContext);
+
+    if (!text || text.trim().length === 0) {
+      return res.status(500).json({ 
+        success: false,
+        message: 'Empty response from AI service',
+        error: 'EMPTY_AI_RESPONSE'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Response generated successfully',
+      response: text.trim(),
+      conversationId: req.body.conversationId || `conv_${Date.now()}`,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('AI chatbot error:', error);
+
+    // Handle specific API errors
+    if (error.message?.includes('API key')) {
+      return res.status(401).json({ 
+        success: false,
+        message: 'Invalid or expired API key',
+        error: 'INVALID_API_KEY'
+      });
+    }
+
+    if (error.message?.includes('quota')) {
+      return res.status(429).json({ 
+        success: false,
+        message: 'API quota exceeded. Please try again later.',
+        error: 'QUOTA_EXCEEDED'
+      });
+    }
+
+    if (error.message?.includes('safety')) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Content filtered for safety reasons',
+        error: 'CONTENT_FILTERED'
+      });
+    }
+
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error while generating AI response',
+      error: 'INTERNAL_SERVER_ERROR'
+    });
+  }
+});
+
 module.exports = router;
