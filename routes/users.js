@@ -209,6 +209,22 @@ router.post('/favorites/:recipeId', auth, async (req, res) => {
   try {
     const recipeId = req.params.recipeId;
     
+    // Validate recipeId is provided
+    if (!recipeId || recipeId === 'undefined' || recipeId === 'null') {
+      logger.warn('Invalid or missing recipe ID', {
+        userId: req.user.id,
+        recipeId,
+        message: 'Frontend sent undefined/null recipe ID'
+      });
+      
+      return res.status(400).json({
+        success: false,
+        message: 'Recipe ID is required and must be valid',
+        error: 'INVALID_RECIPE_ID',
+        details: 'The recipe ID was not provided or is invalid. Please ensure the recipe has a valid ID before adding to favorites.'
+      });
+    }
+    
     logger.logUserActivity('ADD_FAVORITE_ATTEMPT', req, req.user.id, {
       recipeId,
       isTemporary: recipeId.startsWith('temp_'),
@@ -358,6 +374,22 @@ router.delete('/favorites/:recipeId', auth, async (req, res) => {
   const startTime = Date.now();
   try {
     const recipeId = req.params.recipeId;
+    
+    // Validate recipeId is provided
+    if (!recipeId || recipeId === 'undefined' || recipeId === 'null') {
+      logger.warn('Invalid or missing recipe ID for removal', {
+        userId: req.user.id,
+        recipeId,
+        message: 'Frontend sent undefined/null recipe ID'
+      });
+      
+      return res.status(400).json({
+        success: false,
+        message: 'Recipe ID is required and must be valid',
+        error: 'INVALID_RECIPE_ID',
+        details: 'The recipe ID was not provided or is invalid. Please ensure the recipe has a valid ID.'
+      });
+    }
     
     logger.logUserActivity('REMOVE_FAVORITE_ATTEMPT', req, req.user.id, {
       recipeId,
