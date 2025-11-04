@@ -133,7 +133,9 @@ app.get('/api/health', async (req, res) => {
       timestamp: new Date().toISOString(),
       database: 'connected',
       platform: 'Netlify Functions',
-      environment: process.env.NODE_ENV || 'production'
+      environment: process.env.NODE_ENV || 'production',
+      geminiConfigured: !!process.env.GEMINI_API_KEY,
+      jwtConfigured: !!process.env.JWT_SECRET
     });
   } catch (error) {
     console.error('[Health] Database check failed:', error.message);
@@ -142,7 +144,9 @@ app.get('/api/health', async (req, res) => {
       error: error.message,
       timestamp: new Date().toISOString(),
       platform: 'Netlify Functions',
-      environment: process.env.NODE_ENV || 'production'
+      environment: process.env.NODE_ENV || 'production',
+      geminiConfigured: !!process.env.GEMINI_API_KEY,
+      jwtConfigured: !!process.env.JWT_SECRET
     });
   }
 });
@@ -186,11 +190,22 @@ app.get('/api/proxy/totalusers', async (req, res) => {
 });
 
 // Error handling middleware
-app.use((err, req, res, next) => {
-  console.error('[Error]', err.message, err.stack);
-  res.status(500).json({ 
-    message: 'Something went wrong!',
-    error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error',
+app.use((err, req, res, _next) => {
+  console.error('[Error] Status:', err.status || 500);
+  console.error('[Error] Message:', err.message);
+  console.error('[Error] Stack:', err.stack);
+  console.error('[Error] Request:', req.method, req.originalUrl);
+  
+  const statusCode = err.status || err.statusCode || 500;
+  
+  res.status(statusCode).json({ 
+    success: false,
+    message: err.message || 'Something went wrong!',
+    error: {
+      message: err.message || 'Internal server error',
+      code: err.code || 'INTERNAL_ERROR',
+      ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    },
     timestamp: new Date().toISOString()
   });
 });
