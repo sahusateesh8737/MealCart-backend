@@ -17,6 +17,135 @@ try {
   console.error('[Gemini] Failed to initialize Gemini AI:', error.message);
 }
 
+// AI Chatbot endpoint - conversational interface
+router.post('/chat', auth, async (req, res) => {
+  try {
+    const { message, conversationHistory = [] } = req.body;
+
+    if (!message || typeof message !== 'string' || message.trim().length === 0) {
+      return res.status(400).json({ 
+        message: 'Message is required and must be a non-empty string',
+        error: 'MISSING_MESSAGE'
+      });
+    }
+
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({ 
+        message: 'Gemini API key not configured',
+        error: 'API_KEY_MISSING'
+      });
+    }
+
+    if (!genAI) {
+      console.error('Attempting to reinitialize Gemini AI...');
+      try {
+        genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        console.log('Gemini AI reinitialized successfully');
+      } catch (reinitError) {
+        console.error('Failed to reinitialize Gemini AI:', reinitError);
+        return res.status(500).json({ 
+          message: 'Gemini AI not properly initialized',
+          error: 'AI_INITIALIZATION_ERROR'
+        });
+      }
+    }
+
+    // Get the generative model
+    let model;
+    try {
+      model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    } catch (modelError) {
+      console.error('Error with gemini-2.0-flash, trying gemini-1.5-flash:', modelError);
+      try {
+        model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      } catch (fallbackError) {
+        console.error('Error with gemini-1.5-flash:', fallbackError);
+        return res.status(500).json({ 
+          message: 'Failed to initialize AI model',
+          error: 'MODEL_INITIALIZATION_ERROR'
+        });
+      }
+    }
+
+    // Build conversation context
+    let conversationContext = `You are MealCart AI Assistant, a friendly and knowledgeable cooking expert. You help users with:
+- Recipe recommendations and modifications
+- Cooking techniques and tips
+- Ingredient substitutions
+- Meal planning and preparation
+- Nutritional advice
+- Dietary restrictions and preferences
+- Grocery shopping suggestions
+- Food safety and storage
+
+Be conversational, helpful, and concise. If the question is not related to cooking or food, politely redirect to food-related topics.
+
+`;
+
+    // Add conversation history if provided
+    if (conversationHistory.length > 0) {
+      conversationContext += '\nConversation history:\n';
+      conversationHistory.slice(-5).forEach(msg => {
+        conversationContext += `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}\n`;
+      });
+      conversationContext += '\n';
+    }
+
+    // Add current user message
+    conversationContext += `Current user message: ${message.trim()}\n\nPlease respond in a friendly, helpful manner:`;
+
+    // Generate response
+    const result = await model.generateContent(conversationContext);
+    const response = await result.response;
+    const text = response.text();
+
+    if (!text || text.trim().length === 0) {
+      return res.status(500).json({ 
+        message: 'Empty response from AI service',
+        error: 'EMPTY_AI_RESPONSE'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Response generated successfully',
+      response: text.trim(),
+      conversationId: req.body.conversationId || `conv_${Date.now()}`,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('AI chatbot error:', error);
+
+    // Handle specific API errors
+    if (error.message?.includes('API key')) {
+      return res.status(401).json({ 
+        message: 'Invalid or expired API key',
+        error: 'INVALID_API_KEY'
+      });
+    }
+
+    if (error.message?.includes('quota')) {
+      return res.status(429).json({ 
+        message: 'API quota exceeded. Please try again later.',
+        error: 'QUOTA_EXCEEDED'
+      });
+    }
+
+    if (error.message?.includes('safety')) {
+      return res.status(400).json({ 
+        message: 'Content filtered for safety reasons',
+        error: 'CONTENT_FILTERED'
+      });
+    }
+
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error while generating AI response',
+      error: 'INTERNAL_SERVER_ERROR'
+    });
+  }
+});
+
 // Gemini AI suggestion endpoint
 router.post('/suggest', auth, async (req, res) => {
   try {
