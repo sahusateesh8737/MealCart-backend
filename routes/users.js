@@ -166,26 +166,34 @@ router.get('/favorites', auth, async (req, res) => {
     const limit = parseInt(req.query.limit) || 12;
     const skip = (page - 1) * limit;
 
-    const user = await User.findById(req.user.id)
-      .populate({
-        path: 'favoriteRecipes',
-        populate: {
-          path: 'author',
-          select: 'username profileImage'
-        },
-        options: {
-          skip: skip,
-          limit: limit,
-          sort: { createdAt: -1 }
-        }
+    const user = await User.findById(req.user.id);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
       });
+    }
 
-    const totalFavorites = user.favoriteRecipes.length;
+    // Get total count before pagination
+    const totalFavorites = user.favoriteRecipes ? user.favoriteRecipes.length : 0;
+
+    // Populate favorites with pagination
+    await user.populate({
+      path: 'favoriteRecipes',
+      select: '-__v',
+      options: {
+        skip: skip,
+        limit: limit,
+        sort: { createdAt: -1 },
+        strictPopulate: false
+      }
+    });
 
     res.json({
       success: true,
       data: {
-        recipes: user.favoriteRecipes,
+        recipes: user.favoriteRecipes || [],
         pagination: {
           currentPage: page,
           totalPages: Math.ceil(totalFavorites / limit),

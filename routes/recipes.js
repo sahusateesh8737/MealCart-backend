@@ -50,8 +50,84 @@ router.get('/search-by-ingredients', searchRecipes);
 // Get trending/popular recipes
 router.get('/trending', getTrendingRecipes);
 
-// Save a recipe to MongoDB
-router.post('/save', auth, async (req, res) => {
+// GET /api/recipes/favorites - Get user's favorite recipes (alias to /api/users/favorites)
+router.get('/favorites', auth, async (req, res) => {
+  try {
+    console.log('[Favorites] Request from user:', req.user._id || req.user.id);
+    
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    // Get user from database
+    const User = require('../models/User');
+    const userId = req.user._id || req.user.id;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      console.log('[Favorites] User not found:', userId);
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Get total count of favorites
+    const totalFavorites = user.favoriteRecipes ? user.favoriteRecipes.length : 0;
+
+    console.log(`[Favorites] User ${userId} has ${totalFavorites} favorite recipe IDs:`, user.favoriteRecipes);
+
+    // If no favorites, return empty array
+    if (totalFavorites === 0) {
+      console.log('[Favorites] No favorites found, returning empty array');
+      return res.json({
+        success: true,
+        recipes: [],
+        pagination: {
+          page,
+          limit,
+          totalPages: 0,
+          totalRecipes: 0
+        }
+      });
+    }
+
+    // Populate favorites with pagination - be explicit to avoid auto-populate issues
+    await user.populate({
+      path: 'favoriteRecipes',
+      select: '-__v', // Exclude version key
+      options: {
+        skip,
+        limit,
+        sort: { createdAt: -1 },
+        strictPopulate: false // Allow flexible population
+      }
+    });
+
+    console.log(`[Favorites] Populated ${user.favoriteRecipes.length} recipes`);
+
+    res.json({
+      success: true,
+      recipes: user.favoriteRecipes || [],
+      pagination: {
+        page,
+        limit,
+        totalPages: Math.ceil(totalFavorites / limit),
+        totalRecipes: totalFavorites
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching favorite recipes:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching favorite recipes',
+      error: error.message
+    });
+  }
+});
+
+// POST /api/recipes - Create/save a new recipe (alias to /save for frontend compatibility)
+router.post('/', auth, async (req, res) => {
   const startTime = Date.now();
   try {
     const { 
@@ -69,7 +145,7 @@ router.post('/save', auth, async (req, res) => {
       nutrition
     } = req.body;
 
-    logger.logUserActivity('RECIPE_SAVE_ATTEMPT', req, req.user._id, {
+    logger.logUserActivity('RECIPE_CREATE_ATTEMPT', req, req.user._id, {
       recipeName: name,
       externalId,
       ingredientsCount: ingredients?.length,
@@ -79,27 +155,211 @@ router.post('/save', auth, async (req, res) => {
     });
 
     // Validation
-    if (!externalId || !name || !instructions) {
-      logger.warn('Recipe save failed - missing required fields', {
+    if (!name || !instructions) {
+      logger.warn('Recipe creation failed - missing required fields', {
         userId: req.user._id,
-        hasExternalId: !!externalId,
         hasName: !!name,
         hasInstructions: !!instructions
       });
       return res.status(400).json({ 
-        message: 'External ID, name, and instructions are required',
+        success: false,
+        message: 'Recipe name and instructions are required',
         error: 'MISSING_REQUIRED_FIELDS'
       });
     }
 
     if (!Array.isArray(ingredients) || ingredients.length === 0) {
-      logger.warn('Recipe save failed - missing ingredients', {
+      logger.warn('Recipe creation failed - missing ingredients', {
         userId: req.user._id,
         recipeName: name,
         isArray: Array.isArray(ingredients),
         ingredientsLength: ingredients?.length
       });
       return res.status(400).json({ 
+        success: false,
+        message: 'At least one ingredient is required',
+        error: 'MISSING_INGREDIENTS'
+      });
+    }
+
+    // Convert ingredients from strings to objects if needed
+    const formattedIngredients = ingredients.map(ing => {
+      if (typeof ing === 'string') {
+        return {
+          name: ing,
+          amount: '',
+          unit: '',
+          original: ing
+        };
+      }
+      return {
+        name: ing.name || ing.original || '',
+        amount: ing.amount || '',
+        unit: ing.unit || '',
+        original: ing.original || ing.name || ''
+      };
+    });
+
+    // Convert instructions from array to string if needed
+    const formattedInstructions = Array.isArray(instructions) 
+      ? instructions.join('\n') 
+      : instructions;
+
+    // Normalize difficulty to lowercase
+    const normalizedDifficulty = difficulty 
+      ? difficulty.toLowerCase() 
+      : 'medium';
+
+    // Check if recipe already exists (if externalId provided)
+    if (externalId) {
+      const existingRecipe = await Recipe.findOne({ 
+        externalId, 
+        userId: req.user._id 
+      });
+
+      if (existingRecipe) {
+        logger.warn('Recipe creation failed - already exists', {
+          userId: req.user._id,
+          recipeName: name,
+          externalId,
+          existingRecipeId: existingRecipe._id
+        });
+        return res.status(400).json({ 
+          success: false,
+          message: 'Recipe already saved',
+          error: 'RECIPE_ALREADY_EXISTS',
+          recipe: existingRecipe
+        });
+      }
+    }
+
+    // Create new recipe
+    const recipe = new Recipe({
+      externalId: externalId || `user_${req.user._id}_${Date.now()}`,
+      name,
+      image: image || '',
+      description: description || '',
+      ingredients: formattedIngredients,
+      instructions: formattedInstructions,
+      cookingTime: cookingTime || 0,
+      preparationTime: preparationTime || 0,
+      servings: servings || 1,
+      difficulty: normalizedDifficulty,
+      dietaryTags: dietaryTags || [],
+      nutrition: nutrition || {
+        calories: 0,
+        protein: 0,
+        carbs: 0,
+        fat: 0,
+        fiber: 0
+      },
+      userId: req.user._id,
+      source: 'user_created',
+      isAIGenerated: false
+    });
+
+    await recipe.save();
+
+    const duration = Date.now() - startTime;
+    logger.logUserActivity('RECIPE_CREATED', req, req.user._id, {
+      recipeId: recipe._id,
+      recipeName: name,
+      externalId: recipe.externalId,
+      duration,
+      ingredientsCount: ingredients.length,
+      instructionsCount: instructions.length
+    });
+
+    console.log(`Recipe created successfully: ${recipe._id} (${duration}ms)`);
+
+    res.status(201).json({
+      success: true,
+      message: 'Recipe created successfully',
+      recipe,
+      duration
+    });
+
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error('Recipe creation error', error, {
+      userId: req.user?._id,
+      recipeName: req.body?.name,
+      duration,
+      stack: error.stack
+    });
+
+    console.error('Error creating recipe:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error creating recipe',
+      error: error.message 
+    });
+  }
+});
+
+// Save a recipe to MongoDB
+router.post('/save', auth, async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const { 
+      externalId, 
+      name,
+      title, // Frontend might send 'title' instead of 'name'
+      image, 
+      description, 
+      ingredients, 
+      instructions,
+      cookingTime,
+      preparationTime,
+      servings,
+      difficulty,
+      dietaryTags,
+      nutrition
+    } = req.body;
+
+    // Use 'name' or 'title' - whichever is provided
+    const recipeName = name || title;
+
+    logger.logUserActivity('RECIPE_SAVE_ATTEMPT', req, req.user._id, {
+      recipeName,
+      externalId,
+      ingredientsCount: ingredients?.length,
+      difficulty,
+      servings,
+      hasNutrition: !!nutrition
+    });
+
+    // Validation
+    if (!externalId || !recipeName || !instructions) {
+      logger.warn('Recipe save failed - missing required fields', {
+        userId: req.user._id,
+        hasExternalId: !!externalId,
+        hasName: !!recipeName,
+        hasInstructions: !!instructions,
+        receivedFields: Object.keys(req.body)
+      });
+      return res.status(400).json({ 
+        success: false,
+        message: 'External ID, recipe name (or title), and instructions are required',
+        error: 'MISSING_REQUIRED_FIELDS',
+        details: {
+          externalId: !!externalId,
+          name: !!recipeName,
+          instructions: !!instructions,
+          receivedFields: Object.keys(req.body)
+        }
+      });
+    }
+
+    if (!Array.isArray(ingredients) || ingredients.length === 0) {
+      logger.warn('Recipe save failed - missing ingredients', {
+        userId: req.user._id,
+        recipeName,
+        isArray: Array.isArray(ingredients),
+        ingredientsLength: ingredients?.length
+      });
+      return res.status(400).json({ 
+        success: false,
         message: 'At least one ingredient is required',
         error: 'MISSING_INGREDIENTS'
       });
@@ -114,32 +374,58 @@ router.post('/save', auth, async (req, res) => {
     if (existingRecipe) {
       logger.warn('Recipe save failed - already saved', {
         userId: req.user._id,
-        recipeName: name,
+        recipeName,
         externalId,
         existingRecipeId: existingRecipe._id
       });
       return res.status(400).json({ 
+        success: false,
         message: 'Recipe already saved',
         error: 'RECIPE_ALREADY_SAVED',
         recipe: existingRecipe
       });
     }
 
+    // Convert ingredients to proper format if needed
+    const formattedIngredients = ingredients.map(ing => {
+      if (typeof ing === 'string') {
+        return {
+          name: ing,
+          amount: '',
+          unit: '',
+          original: ing
+        };
+      }
+      return {
+        name: ing.name || ing.original || '',
+        amount: ing.amount || '',
+        unit: ing.unit || '',
+        original: ing.original || ing.name || ''
+      };
+    });
+
+    // Convert instructions to string if it's an array
+    const formattedInstructions = Array.isArray(instructions) 
+      ? instructions.join('\n') 
+      : instructions;
+
     // Create new recipe
     const recipe = new Recipe({
       externalId,
-      name,
+      name: recipeName,
       image: image || '',
       description: description || '',
-      ingredients,
-      instructions,
+      ingredients: formattedIngredients,
+      instructions: formattedInstructions,
       userId: req.user._id,
       cookingTime: cookingTime || null,
       preparationTime: preparationTime || null,
       servings: servings || 1,
-      difficulty: difficulty || 'medium',
+      difficulty: difficulty ? difficulty.toLowerCase() : 'medium',
       dietaryTags: dietaryTags || [],
-      nutrition: nutrition || {}
+      nutrition: nutrition || {},
+      source: 'external_api',
+      isAIGenerated: false
     });
 
     await recipe.save();
@@ -147,7 +433,7 @@ router.post('/save', auth, async (req, res) => {
 
     const processingTime = Date.now() - startTime;
     logger.logUserActivity('RECIPE_SAVE_SUCCESS', req, req.user._id, {
-      recipeName: name,
+      recipeName,
       recipeId: recipe._id,
       externalId,
       ingredientsCount: ingredients.length,
@@ -157,6 +443,7 @@ router.post('/save', auth, async (req, res) => {
     });
 
     res.status(201).json({
+      success: true,
       message: 'Recipe saved successfully',
       recipe
     });
@@ -166,7 +453,7 @@ router.post('/save', auth, async (req, res) => {
       action: 'RECIPE_SAVE',
       userId: req.user?._id,
       processingTime: `${processingTime}ms`,
-      recipeName: req.body.name
+      recipeName: req.body.name || req.body.title
     });
     
     if (error.name === 'ValidationError') {
