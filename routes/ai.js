@@ -1,5 +1,5 @@
 const express = require('express');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenAI } = require('@google/genai');
 const { auth, optional } = require('../middleware/auth');
 const User = require('../models/User');
 const Recipe = require('../models/Recipe');
@@ -8,16 +8,17 @@ const { logger } = require('../utils/logger');
 const router = express.Router();
 
 // Initialize Gemini AI safely
-let genAI = null;
+let aiClient = null;
 try {
   if (!process.env.GEMINI_API_KEY) {
     console.warn('[AI] GEMINI_API_KEY not set - AI routes will return 503');
   } else {
-    genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    console.log('[AI] Gemini AI initialized successfully');
+    // New SDK initialization
+    aiClient = new GoogleGenAI({ key: process.env.GEMINI_API_KEY });
+    console.log('[AI] GoogleGenAI SDK initialized successfully');
   }
 } catch (error) {
-  console.error('[AI] Failed to initialize Gemini AI:', error.message);
+  console.error('[AI] Failed to initialize GoogleGenAI:', error.message);
 }
 
 // Helper function to parse nutrition info from text
@@ -39,7 +40,7 @@ const parseNutritionFromText = (nutritionText) => {
   const fiberMatch = nutritionText.match(/fiber[:\s]*(\d+(?:\.\d+)?)/i);
   const sugarMatch = nutritionText.match(/sugar[:\s]*(\d+(?:\.\d+)?)/i);
   const sodiumMatch = nutritionText.match(/sodium[:\s]*(\d+(?:\.\d+)?)/i);
-  
+
   if (caloriesMatch) nutrition.calories = parseInt(caloriesMatch[1]);
   if (proteinMatch) nutrition.protein = parseFloat(proteinMatch[1]);
   if (carbsMatch) nutrition.carbs = parseFloat(carbsMatch[1]);
@@ -47,17 +48,17 @@ const parseNutritionFromText = (nutritionText) => {
   if (fiberMatch) nutrition.fiber = parseFloat(fiberMatch[1]);
   if (sugarMatch) nutrition.sugar = parseFloat(sugarMatch[1]);
   if (sodiumMatch) nutrition.sodium = parseFloat(sodiumMatch[1]);
-  
+
   return nutrition;
 };
 
 // Helper function for robust JSON parsing
 const parseAIResponse = (text, expectedFields = []) => {
   let jsonString = text.trim();
-  
+
   console.log('Raw AI response (first 100 chars):', jsonString.substring(0, 100));
   logger.debug('Raw AI response received', { responseLength: jsonString.length, preview: jsonString.substring(0, 100) });
-  
+
   // Remove markdown code blocks if present
   if (jsonString.startsWith('```')) {
     const codeBlockMatch = jsonString.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
@@ -67,7 +68,7 @@ const parseAIResponse = (text, expectedFields = []) => {
       logger.debug('Extracted JSON from code block', { preview: jsonString.substring(0, 100) });
     }
   }
-  
+
   // If still no JSON, try to find JSON object
   if (!jsonString.startsWith('{') && !jsonString.startsWith('[')) {
     const jsonMatch = jsonString.match(/(\{[\s\S]*\})/);
@@ -77,7 +78,7 @@ const parseAIResponse = (text, expectedFields = []) => {
       logger.debug('Extracted JSON object from text', { preview: jsonString.substring(0, 100) });
     }
   }
-  
+
   // Clean up common JSON formatting issues
   jsonString = jsonString
     .replace(/,\s*}/g, '}')  // Remove trailing commas in objects
@@ -88,12 +89,12 @@ const parseAIResponse = (text, expectedFields = []) => {
     .replace(/"amount":\s*1\/4/g, '"amount": 0.25') // Specific case for 1/4
     .replace(/"amount":\s*3\/4/g, '"amount": 0.75') // Specific case for 3/4
     .trim();
-  
+
   console.log('Cleaned JSON (first 100 chars):', jsonString.substring(0, 100));
   logger.debug('JSON after cleaning', { preview: jsonString.substring(0, 100) });
-  
+
   const parsed = JSON.parse(jsonString);
-  
+
   // Validate expected fields if provided
   if (expectedFields.length > 0) {
     for (const field of expectedFields) {
@@ -102,29 +103,36 @@ const parseAIResponse = (text, expectedFields = []) => {
       }
     }
   }
-  
+
   return parsed;
 };
 
-// Helper function for API calls with retry logic
-const callAIWithRetry = async (model, prompt, maxRetries = 3) => {
+// Helper function for API calls with retry logic using new SDK
+const callAIWithRetry = async (client, modelName, prompt, maxRetries = 3) => {
   let retryCount = 0;
-  
+
   while (retryCount < maxRetries) {
     try {
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      return response.text();
+      const response = await client.models.generateContent({
+        model: modelName,
+        contents: prompt,
+      });
+
+      // New SDK structure: response.text is a property, not a function
+      return response.text;
     } catch (apiError) {
       retryCount++;
       logger.warn('AI API call failed', {
         attempt: retryCount,
         maxRetries,
         error: apiError.message,
-        isRetryable: apiError.message?.includes('overloaded') || apiError.message?.includes('503')
+        isRetryable: apiError.message?.includes('429') || apiError.message?.includes('503') || apiError.message?.includes('quota')
       });
-      
-      if (apiError.message?.includes('overloaded') || apiError.message?.includes('503')) {
+
+      const isQuotaError = apiError.message?.includes('429') || apiError.message?.includes('quota');
+      const isOverloaded = apiError.message?.includes('503') || apiError.message?.includes('overloaded');
+
+      if (isQuotaError || isOverloaded) {
         if (retryCount < maxRetries) {
           // Wait before retrying (exponential backoff)
           const waitTime = Math.pow(2, retryCount) * 1000; // 2s, 4s, 8s
@@ -133,7 +141,7 @@ const callAIWithRetry = async (model, prompt, maxRetries = 3) => {
           continue;
         }
       }
-      
+
       // If not a retry-able error or max retries reached, throw the error
       throw apiError;
     }
@@ -145,7 +153,7 @@ router.post('/generate-recipe', auth, async (req, res) => {
   const startTime = Date.now();
   try {
     // Check if Gemini AI is initialized
-    if (!genAI) {
+    if (!aiClient) {
       console.warn('[AI] Gemini AI not initialized - check GEMINI_API_KEY');
       return res.status(503).json({
         success: false,
@@ -191,7 +199,7 @@ router.post('/generate-recipe', auth, async (req, res) => {
     const user = await User.findById(req.user.id);
     const userDietaryRestrictions = user?.dietaryRestrictions || [];
     const userAllergens = user?.allergens || [];
-    
+
     // Combine user preferences with request preferences
     const allDietaryRestrictions = [...new Set([...dietaryRestrictions, ...userDietaryRestrictions])];
     const allExclusions = [...new Set([...excludeIngredients, ...userAllergens])];
@@ -237,11 +245,22 @@ Respond with this exact JSON structure:
 
 Make sure the recipe is realistic, balanced, and follows all dietary restrictions. Include proper cooking techniques and timing.`;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-    
-    // Call AI with retry logic
+    // Call AI with retry logic using new SDK and gemini-2.5-flash
     const aiStartTime = Date.now();
-    const text = await callAIWithRetry(model, prompt);
+    let text;
+
+    try {
+      text = await callAIWithRetry(aiClient, 'gemini-2.5-flash', prompt);
+    } catch (primaryError) {
+      console.warn('Primary model (gemini-2.5-flash) failed:', primaryError.message);
+      try {
+        console.warn('Attempting fallback to gemini-1.5-flash');
+        text = await callAIWithRetry(aiClient, 'gemini-1.5-flash', prompt);
+      } catch (fallbackError) {
+        throw primaryError;
+      }
+    }
+
     const aiResponseTime = Date.now() - aiStartTime;
 
     logger.debug('AI API response received', {
@@ -254,18 +273,18 @@ Make sure the recipe is realistic, balanced, and follows all dietary restriction
     let recipeData;
     try {
       recipeData = parseAIResponse(text, ['title', 'ingredients', 'instructions']);
-      
+
       // Ensure required fields have defaults
       recipeData.name = recipeData.title || recipeData.name || 'Untitled Recipe';
       delete recipeData.title; // Remove title, use name instead
-      
+
     } catch (parseError) {
       logger.error('Error parsing AI response for recipe generation', {
         userId: req.user.id,
         parseError: parseError.message,
         rawResponsePreview: text.substring(0, 200)
       });
-      
+
       // Return a simplified error response
       return res.status(500).json({
         success: false,
@@ -357,7 +376,7 @@ router.post('/generate-meal-plan', auth, async (req, res) => {
 router.post('/generate', optional, async (req, res) => {
   try {
     // Check if Gemini AI is initialized
-    if (!genAI) {
+    if (!aiClient) {
       console.warn('[AI] Gemini AI not initialized - check GEMINI_API_KEY');
       return res.status(503).json({
         success: false,
@@ -367,7 +386,7 @@ router.post('/generate', optional, async (req, res) => {
     }
 
     const { query } = req.body;
-    
+
     if (!query || typeof query !== 'string' || query.trim() === '') {
       return res.status(400).json({
         success: false,
@@ -409,24 +428,33 @@ Respond with this exact JSON structure:
 
 Make sure the recipe is realistic, balanced, and uses common ingredients. The groceryList should include all necessary ingredients grouped by category.`;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-    
-    // Call AI with retry logic
-    const text = await callAIWithRetry(model, prompt);
+    // Call AI with retry logic using gemini-2.5-flash
+    let text;
+    try {
+      text = await callAIWithRetry(aiClient, 'gemini-2.5-flash', prompt);
+    } catch (primaryError) {
+      console.warn('Primary model (gemini-2.5-flash) failed:', primaryError.message);
+      try {
+        console.warn('Attempting fallback to gemini-1.5-flash');
+        text = await callAIWithRetry(aiClient, 'gemini-1.5-flash', prompt);
+      } catch (fallbackError) {
+        throw primaryError;
+      }
+    }
 
     // Extract JSON from response with better error handling
     let recipeData;
     try {
       recipeData = parseAIResponse(text, ['title', 'ingredients', 'instructions', 'groceryList']);
-      
+
       // Ensure fields are properly set
       recipeData.name = recipeData.title || 'Untitled Recipe';
       delete recipeData.title; // Remove title, use name instead
-      
+
     } catch (parseError) {
       console.error('Error parsing AI response:', parseError);
       console.error('Raw AI response:', text);
-      
+
       return res.status(500).json({
         success: false,
         message: 'AI returned malformed response. Please try again.',
@@ -439,17 +467,17 @@ Make sure the recipe is realistic, balanced, and uses common ingredients. The gr
     let savedRecipe;
     const userId = req.user ? req.user.id : null;
     const isAuthenticated = !!userId;
-    
+
     if (isAuthenticated) {
       try {
         // Prepare recipe data for database storage
         const recipeId = `ai_search_${Date.now()}`;
-        
+
         const newRecipe = new Recipe({
           externalId: recipeId, // Required field
           name: recipeData.name,
           description: recipeData.description || '',
-          ingredients: recipeData.ingredients.map(ingredient => ({ 
+          ingredients: recipeData.ingredients.map(ingredient => ({
             name: ingredient,
             amount: '1',
             unit: 'item',
@@ -468,13 +496,13 @@ Make sure the recipe is realistic, balanced, and uses common ingredients. The gr
           groceryList: recipeData.groceryList || [], // Store grocery list directly
           createdAt: new Date()
         });
-        
+
         // Save the recipe to the database
         savedRecipe = await newRecipe.save();
-        
+
         // Log the save operation
         console.log(`Saved AI search-generated recipe to database with ID: ${savedRecipe._id}, User: ${userId}`);
-        
+
         // Also add to user's recently generated recipes (if applicable)
         try {
           await User.findByIdAndUpdate(userId, {
@@ -492,7 +520,7 @@ Make sure the recipe is realistic, balanced, and uses common ingredients. The gr
     } else {
       console.log('User not authenticated - recipe will not be saved to database');
     }
-    
+
     // Prepare recipe data to return to the client
     const recipeToReturn = savedRecipe ? {
       id: savedRecipe._id.toString(),
@@ -528,10 +556,10 @@ Make sure the recipe is realistic, balanced, and uses common ingredients. The gr
       isSaved: false, // Indicate this recipe is not saved in the database
       isFavorite: false
     };
-    
+
     // Construct appropriate message based on authentication status and save status
     let responseMessage = 'Recipe generated successfully';
-    
+
     if (isAuthenticated) {
       if (savedRecipe) {
         responseMessage = 'Recipe saved to your collection';
@@ -541,7 +569,7 @@ Make sure the recipe is realistic, balanced, and uses common ingredients. The gr
     } else {
       responseMessage = 'Recipe generated successfully. Sign in to save it to your collection.';
     }
-    
+
     res.json({
       success: true,
       recipe: recipeToReturn,
@@ -565,7 +593,7 @@ Make sure the recipe is realistic, balanced, and uses common ingredients. The gr
 router.post('/search-recipes', async (req, res) => {
   try {
     // Check if Gemini AI is initialized
-    if (!genAI) {
+    if (!aiClient) {
       console.warn('[AI] Gemini AI not initialized - check GEMINI_API_KEY');
       return res.status(503).json({
         success: false,
@@ -575,7 +603,7 @@ router.post('/search-recipes', async (req, res) => {
     }
 
     const { query } = req.body;
-    
+
     if (!query || !query.trim()) {
       return res.status(400).json({
         success: false,
@@ -584,8 +612,6 @@ router.post('/search-recipes', async (req, res) => {
     }
 
     console.log('Searching for recipes with query:', query);
-
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const prompt = `Based on the search query "${query.trim()}", provide 5-8 diverse recipe suggestions. 
     Return ONLY a valid JSON array with this exact structure for each recipe:
@@ -624,27 +650,93 @@ router.post('/search-recipes', async (req, res) => {
     
     DO NOT include any text before or after the JSON array. Return ONLY the JSON array.`;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+    // Try primary model first (Gemini 2.5 Flash) with new SDK
+    let text;
+    try {
+      // Attempt generation with retries using primary model
+      text = await callAIWithRetry(aiClient, 'gemini-2.5-flash', prompt);
 
-    console.log('Raw AI response for recipe search:', text.substring(0, 200));
+    } catch (primaryError) {
+      console.warn('Primary model (gemini-2.5-flash) failed:', primaryError.message);
 
-    // Parse the AI response
-    const recipes = parseAIResponse(text);
-    
+      // Check if we should try fallback (429 Quota or 503 Overloaded)
+      const isQuotaError = primaryError.message?.includes('429') || primaryError.message?.includes('quota');
+      const isOverloaded = primaryError.message?.includes('503') || primaryError.message?.includes('overloaded');
+
+      // Also fallback if model not found (maybe 2.5 isn't available to them yet?)
+      const isModelError = primaryError.message?.includes('model') || primaryError.message?.includes('not found');
+
+      if (isQuotaError || isOverloaded || isModelError) {
+        console.log('Attempting fallback to gemini-1.5-flash due to issues...');
+        try {
+          // Attempt generation with fallback model
+          text = await callAIWithRetry(aiClient, 'gemini-1.5-flash', prompt);
+
+        } catch (fallbackError) {
+          console.error('Fallback model (gemini-1.5-flash) also failed:', fallbackError);
+
+          if (isQuotaError) {
+            return res.status(429).json({
+              success: false,
+              message: 'AI service quota exceeded. Please try again later.',
+              error: 'QUOTA_EXCEEDED'
+            });
+          }
+
+          return res.status(503).json({
+            success: false,
+            message: 'AI service is currently busy. Please try again later.',
+            error: 'AI_SERVICE_UNAVAILABLE'
+          });
+        }
+      } else {
+        console.error('Non-retryable AI error:', primaryError);
+        return res.status(500).json({
+          success: false,
+          message: 'Error generating recipes',
+          error: primaryError.message
+        });
+      }
+    }
+
+    console.log('Raw AI response for recipe search (preview):', text.substring(0, 100));
+
+    // Parse the AI response with better error handling
+    let recipes;
+    try {
+      recipes = parseAIResponse(text);
+    } catch (parseError) {
+      console.error('Error parsing AI response:', parseError);
+      console.error('Raw text that failed parsing:', text);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to parse AI response',
+        error: 'JSON_PARSE_ERROR',
+        details: parseError.message
+      });
+    }
+
     if (!Array.isArray(recipes)) {
-      throw new Error('AI did not return a valid recipe array');
+      console.error('AI did not return an array:', recipes);
+      return res.status(500).json({
+        success: false,
+        message: 'AI returned invalid data format',
+        error: 'INVALID_DATA_FORMAT'
+      });
     }
 
     // Validate and clean up the recipes
     const validRecipes = recipes.filter(recipe => {
-      return recipe.title && 
-             recipe.description && 
-             Array.isArray(recipe.ingredients) && 
-             Array.isArray(recipe.instructions) &&
-             recipe.ingredients.length > 0 &&
-             recipe.instructions.length > 0;
+      // Basic validation
+      const isValid = recipe.title &&
+        recipe.description &&
+        Array.isArray(recipe.ingredients) &&
+        Array.isArray(recipe.instructions);
+
+      if (!isValid) {
+        console.warn('Skipping invalid recipe:', recipe.title || 'Unknown');
+      }
+      return isValid;
     }).map(recipe => ({
       ...recipe,
       source: 'AI Generated',
@@ -660,6 +752,14 @@ router.post('/search-recipes', async (req, res) => {
         sodium: 0
       }
     }));
+
+    if (validRecipes.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No valid recipes could be generated. Please try a different query.',
+        error: 'NO_VALID_RECIPES'
+      });
+    }
 
     console.log(`Generated ${validRecipes.length} valid recipe suggestions`);
 
@@ -683,7 +783,7 @@ router.post('/search-recipes', async (req, res) => {
 // POST /api/ai/save - Explicitly save a recipe to the database
 router.post('/save', auth, async (req, res) => {
   const recipeController = require('../controllers/recipeController');
-  
+
   // Call the controller function (user is guaranteed to exist due to auth middleware)
   return recipeController.saveRecipe(req, res);
 });
@@ -694,14 +794,14 @@ router.post('/chat', auth, async (req, res) => {
     const { message, conversationHistory = [] } = req.body;
 
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
         message: 'Message is required and must be a non-empty string',
         error: 'MISSING_MESSAGE'
       });
     }
 
-    if (!genAI) {
+    if (!aiClient) {
       console.warn('[AI] Gemini AI not initialized - check GEMINI_API_KEY');
       return res.status(503).json({
         success: false,
@@ -710,25 +810,7 @@ router.post('/chat', auth, async (req, res) => {
       });
     }
 
-    // Get the generative model with fallback
-    let model;
-    try {
-      model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-    } catch (modelError) {
-      console.error('Error with gemini-2.0-flash, trying gemini-1.5-flash:', modelError);
-      try {
-        model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      } catch (fallbackError) {
-        console.error('Error with gemini-1.5-flash:', fallbackError);
-        return res.status(500).json({ 
-          success: false,
-          message: 'Failed to initialize AI model',
-          error: 'MODEL_INITIALIZATION_ERROR'
-        });
-      }
-    }
-
-    // Build conversation context
+    // Build conversation context - reused context logic
     let conversationContext = `You are MealCart AI Assistant, a friendly and knowledgeable cooking expert. You help users with:
 - Recipe recommendations and modifications
 - Cooking techniques and tips
@@ -755,11 +837,21 @@ Be conversational, helpful, and concise. If the question is not related to cooki
     // Add current user message
     conversationContext += `Current user message: ${message.trim()}\n\nPlease respond in a friendly, helpful manner:`;
 
-    // Generate response with retry logic
-    const text = await callAIWithRetry(model, conversationContext);
+    // Generate response with new SDK and simple fallback
+    let text;
+    try {
+      text = await callAIWithRetry(aiClient, 'gemini-2.5-flash', conversationContext);
+    } catch (primaryError) {
+      // Fallback to 1.5
+      try {
+        text = await callAIWithRetry(aiClient, 'gemini-1.5-flash', conversationContext);
+      } catch (fallBackError) {
+        throw primaryError;
+      }
+    }
 
     if (!text || text.trim().length === 0) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         success: false,
         message: 'Empty response from AI service',
         error: 'EMPTY_AI_RESPONSE'
@@ -778,15 +870,15 @@ Be conversational, helpful, and concise. If the question is not related to cooki
 
     // Handle specific API errors
     if (error.message?.includes('API key')) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         success: false,
         message: 'Invalid or expired API key',
         error: 'INVALID_API_KEY'
       });
     }
 
-    if (error.message?.includes('quota')) {
-      return res.status(429).json({ 
+    if (error.message?.includes('quota') || error.message?.includes('429')) {
+      return res.status(429).json({
         success: false,
         message: 'API quota exceeded. Please try again later.',
         error: 'QUOTA_EXCEEDED'
@@ -794,17 +886,17 @@ Be conversational, helpful, and concise. If the question is not related to cooki
     }
 
     if (error.message?.includes('safety')) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
         message: 'Content filtered for safety reasons',
         error: 'CONTENT_FILTERED'
       });
     }
 
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      message: 'Server error while generating AI response',
-      error: 'INTERNAL_SERVER_ERROR'
+      message: 'Error processing AI chat request',
+      error: error.message
     });
   }
 });

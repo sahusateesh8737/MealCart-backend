@@ -163,7 +163,11 @@ router.put('/profile', auth, async (req, res) => {
 router.get('/favorites', auth, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 12;
+    // Handle limit properly: if limit=0, fetch all; otherwise use provided limit or default to 12
+    let limit = req.query.limit !== undefined ? parseInt(req.query.limit) : 12;
+    if (limit === 0) {
+      limit = 10000; // Effectively "all" - set to very large number
+    }
     const skip = (page - 1) * limit;
 
     console.log('[Favorites] GET Request:', {

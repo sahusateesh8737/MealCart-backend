@@ -223,10 +223,12 @@ router.get('/', auth, async (req, res) => {
       });
     }
 
+    const list = user.groceryList || [];
+
     res.json({
       success: true,
-      groceryList: user.groceryList || [],
-      itemCount: user.groceryList ? user.groceryList.length : 0
+      groceryList: list,
+      itemCount: list.length
     });
   } catch (error) {
     console.error('Get grocery list error:', error);
@@ -284,7 +286,8 @@ router.post('/item', auth, async (req, res) => {
       success: true,
       message: 'Item added to grocery list',
       item: newItem,
-      groceryList: user.groceryList
+      groceryList: user.groceryList,
+      itemCount: user.groceryList.length
     });
   } catch (error) {
     console.error('Add grocery list item error:', error);

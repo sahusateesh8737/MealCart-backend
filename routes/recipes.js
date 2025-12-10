@@ -11,6 +11,12 @@ router.get('/my-recipes', auth, async (req, res) => {
   try {
     const userId = req.user._id;
     
+    // Handle limit properly: if limit=0, fetch all; otherwise use provided limit or default to 100
+    let limit = req.query.limit !== undefined ? parseInt(req.query.limit) : 100;
+    if (limit === 0) {
+      limit = 10000; // Effectively "all" - set to very large number
+    }
+    
     console.log('[My Recipes] Request from user:', userId.toString());
     console.log('[My Recipes] Request headers:', {
       origin: req.headers.origin,
@@ -20,7 +26,7 @@ router.get('/my-recipes', auth, async (req, res) => {
 
     const recipes = await Recipe.find({ userId })
       .sort({ createdAt: -1 })
-      .limit(100)
+      .limit(limit)
       .populate('userId', 'username email');
 
     console.log('[My Recipes] Found recipes:', recipes.length);
