@@ -1,11 +1,15 @@
 const express = require('express');
 const { GoogleGenAI } = require('@google/genai');
+const NodeCache = require('node-cache');
 const { auth, optional } = require('../middleware/auth');
 const User = require('../models/User');
 const Recipe = require('../models/Recipe');
 const { logger } = require('../utils/logger');
 
 const router = express.Router();
+
+// Initialize Cache
+const aiCache = new NodeCache({ stdTTL: 86400 }); // Cache for 24 hours
 
 // Initialize Gemini AI safely
 let aiClient = null;
@@ -592,6 +596,29 @@ Make sure the recipe is realistic, balanced, and uses common ingredients. The gr
 // POST /api/ai/search-recipes - Search for multiple recipe suggestions based on query
 router.post('/search-recipes', async (req, res) => {
   try {
+    const { query } = req.body;
+
+    if (!query || !query.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Search query is required'
+      });
+    }
+
+    // Check cache first
+    const cacheKey = `search:${query.trim().toLowerCase()}`;
+    const cachedResult = aiCache.get(cacheKey);
+    if (cachedResult) {
+      console.log(`[AI] Serving cached results for query: "${query}"`);
+      return res.json({
+        success: true,
+        data: cachedResult,
+        count: cachedResult.length,
+        searchQuery: query.trim(),
+        cached: true
+      });
+    }
+
     // Check if Gemini AI is initialized
     if (!aiClient) {
       console.warn('[AI] Gemini AI not initialized - check GEMINI_API_KEY');
@@ -599,15 +626,6 @@ router.post('/search-recipes', async (req, res) => {
         success: false,
         message: 'AI service not available',
         error: 'GEMINI_NOT_INITIALIZED'
-      });
-    }
-
-    const { query } = req.body;
-
-    if (!query || !query.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Search query is required'
       });
     }
 
@@ -762,6 +780,9 @@ router.post('/search-recipes', async (req, res) => {
     }
 
     console.log(`Generated ${validRecipes.length} valid recipe suggestions`);
+
+    // Cache the successful result
+    aiCache.set(cacheKey, validRecipes);
 
     res.json({
       success: true,

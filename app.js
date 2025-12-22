@@ -4,6 +4,7 @@
  */
 
 const express = require('express');
+const compression = require('compression');
 const config = require('./config');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const { securityHeaders, preventMongoInjection, apiRateLimiter } = require('./middleware/security');
@@ -32,6 +33,9 @@ function createApp() {
   // Security middleware (should be first)
   app.use(securityHeaders);
   app.use(preventMongoInjection);
+
+  // Enable GZIP compression
+  app.use(compression());
 
   // CORS middleware
   app.use(corsMiddleware);
@@ -66,7 +70,7 @@ function createApp() {
 
   // API v1 routes
   const apiRouter = express.Router();
-  
+
   apiRouter.use('/auth', authRoutes);
   apiRouter.use('/recipes', recipeRoutes);
   apiRouter.use('/recipes-enhanced', enhancedRecipeRoutes);

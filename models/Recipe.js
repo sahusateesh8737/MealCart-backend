@@ -127,18 +127,22 @@ const recipeSchema = new mongoose.Schema({
 // Compound index for user-specific queries
 recipeSchema.index({ userId: 1, createdAt: -1 });
 recipeSchema.index({ userId: 1, name: 'text' });
+// Index for AI search optimization
+recipeSchema.index({ searchQuery: 1 });
+recipeSchema.index({ 'ingredients.name': 1 }); // Improve findByIngredients performance
+
 // Unique index for user + externalId combination (same recipe can be saved by different users)
 recipeSchema.index({ userId: 1, externalId: 1 }, { unique: true });
 
 // Instance method to increment times cooked
-recipeSchema.methods.markAsCooked = function() {
+recipeSchema.methods.markAsCooked = function () {
   this.timesCooked += 1;
   this.lastCooked = new Date();
   return this.save();
 };
 
 // Static method to find recipes by ingredients
-recipeSchema.statics.findByIngredients = function(userId, ingredients) {
+recipeSchema.statics.findByIngredients = function (userId, ingredients) {
   const ingredientRegex = ingredients.map(ing => new RegExp(ing, 'i'));
   return this.find({
     userId,
