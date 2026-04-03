@@ -12,7 +12,6 @@ dotenv.config();
 const authRoutes = require('../../routes/auth');
 const recipeRoutes = require('../../routes/recipes');
 const groceryListRoutes = require('../../routes/grocerylist');
-const geminiRoutes = require('../../routes/gemini');
 const aiRoutes = require('../../routes/ai');
 const userRoutes = require('../../routes/users');
 const enhancedRecipeRoutes = require('../../routes/recipes_enhanced');
@@ -184,7 +183,6 @@ app.use('/api/auth', authRoutes);
 app.use('/api/recipes', recipeRoutes);
 app.use('/api/recipes-enhanced', enhancedRecipeRoutes);
 app.use('/api/grocerylist', groceryListRoutes);
-app.use('/api/gemini', geminiRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/users', userRoutes);
 
