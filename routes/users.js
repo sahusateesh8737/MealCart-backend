@@ -5,6 +5,20 @@ const Recipe = require('../models/Recipe');
 const { auth } = require('../middleware/auth');
 const { logger } = require('../utils/logger');
 
+// POST /api/users/auth/sync - Sync Supabase auth state to retrieve MongoDB user object
+router.get('/auth/sync', auth, async (req, res) => {
+  try {
+    // req.user has already been synced and attached by the 'auth' middleware
+    res.json({
+      success: true,
+      user: req.user
+    });
+  } catch (error) {
+    logger.error('Error in /auth/sync:', error);
+    res.status(500).json({ success: false, message: 'Failed to synchronize with user database' });
+  }
+});
+
 // Helper function to validate MongoDB ObjectId
 const isValidObjectId = (id) => {
   return /^[0-9a-fA-F]{24}$/.test(id);
