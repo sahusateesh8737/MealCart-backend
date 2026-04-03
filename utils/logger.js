@@ -12,56 +12,63 @@ const colors = {
   blue: '\x1b[34m',
   magenta: '\x1b[35m',
   cyan: '\x1b[36m',
-  white: '\x1b[37m'
+  white: '\x1b[37m',
 };
 
 // Device detection helper
 const detectDevice = (userAgent) => {
   if (!userAgent) return 'Unknown';
-  
+
   const ua = userAgent.toLowerCase();
-  
+
   // Mobile devices
-  if (ua.includes('mobile') || ua.includes('android') || ua.includes('iphone') || ua.includes('ipad')) {
+  if (
+    ua.includes('mobile') ||
+    ua.includes('android') ||
+    ua.includes('iphone') ||
+    ua.includes('ipad')
+  ) {
     if (ua.includes('iphone')) return 'iPhone';
     if (ua.includes('ipad')) return 'iPad';
     if (ua.includes('android')) return 'Android Mobile';
     return 'Mobile Device';
   }
-  
+
   // Desktop browsers
   if (ua.includes('chrome')) return 'Desktop - Chrome';
   if (ua.includes('firefox')) return 'Desktop - Firefox';
   if (ua.includes('safari') && !ua.includes('chrome')) return 'Desktop - Safari';
   if (ua.includes('edge')) return 'Desktop - Edge';
-  
+
   return 'Desktop - Unknown Browser';
 };
 
 // Browser detection helper
 const detectBrowser = (userAgent) => {
   if (!userAgent) return 'Unknown';
-  
+
   const ua = userAgent.toLowerCase();
-  
+
   if (ua.includes('edg/')) return 'Microsoft Edge';
   if (ua.includes('chrome/') && !ua.includes('edg/')) return 'Google Chrome';
   if (ua.includes('firefox/')) return 'Mozilla Firefox';
   if (ua.includes('safari/') && !ua.includes('chrome/')) return 'Safari';
   if (ua.includes('opera/')) return 'Opera';
-  
+
   return 'Unknown Browser';
 };
 
 // Get client IP address
 const getClientIP = (req) => {
-  return req.ip || 
-         req.connection.remoteAddress || 
-         req.socket.remoteAddress ||
-         (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
-         req.headers['x-forwarded-for']?.split(',')[0] ||
-         req.headers['x-real-ip'] ||
-         'Unknown';
+  return (
+    req.ip ||
+    req.connection.remoteAddress ||
+    req.socket.remoteAddress ||
+    (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
+    req.headers['x-forwarded-for']?.split(',')[0] ||
+    req.headers['x-real-ip'] ||
+    'Unknown'
+  );
 };
 
 // Format timestamp
@@ -76,7 +83,7 @@ const LOG_LEVELS = {
   WARN: { level: 1, color: colors.yellow, label: 'WARN' },
   INFO: { level: 2, color: colors.green, label: 'INFO' },
   DEBUG: { level: 3, color: colors.blue, label: 'DEBUG' },
-  TRACE: { level: 4, color: colors.magenta, label: 'TRACE' }
+  TRACE: { level: 4, color: colors.magenta, label: 'TRACE' },
 };
 
 class Logger {
@@ -85,7 +92,7 @@ class Logger {
     this.currentLevel = LOG_LEVELS[this.logLevel]?.level ?? 2;
     this.enableFileLogging = process.env.ENABLE_FILE_LOGGING === 'true';
     this.logDirectory = path.join(__dirname, '../logs');
-    
+
     // Create logs directory if it doesn't exist
     if (this.enableFileLogging && !fs.existsSync(this.logDirectory)) {
       fs.mkdirSync(this.logDirectory, { recursive: true });
@@ -99,44 +106,44 @@ class Logger {
   _formatMessage(level, message, metadata = {}) {
     const timestamp = getTimestamp();
     const logLevel = LOG_LEVELS[level];
-    
+
     // Console format (with colors)
     const consoleMessage = `${colors.dim}[${timestamp}]${colors.reset} ${logLevel.color}${logLevel.label}${colors.reset}: ${message}`;
-    
+
     // File format (without colors)
     const fileMessage = `[${timestamp}] ${logLevel.label}: ${message}`;
-    
+
     if (Object.keys(metadata).length > 0) {
       const metadataStr = JSON.stringify(metadata, null, 2);
       return {
         console: `${consoleMessage}\n${colors.cyan}Metadata:${colors.reset} ${metadataStr}`,
-        file: `${fileMessage}\nMetadata: ${metadataStr}`
+        file: `${fileMessage}\nMetadata: ${metadataStr}`,
       };
     }
-    
+
     return {
       console: consoleMessage,
-      file: fileMessage
+      file: fileMessage,
     };
   }
 
   _writeToFile(message) {
     if (!this.enableFileLogging) return;
-    
+
     const today = new Date().toISOString().split('T')[0];
     const logFile = path.join(this.logDirectory, `app-${today}.log`);
-    
+
     fs.appendFileSync(logFile, message + '\n');
   }
 
   _log(level, message, metadata = {}) {
     if (!this._shouldLog(level)) return;
-    
+
     const formatted = this._formatMessage(level, message, metadata);
-    
+
     // Console output
     console.log(formatted.console);
-    
+
     // File output
     this._writeToFile(formatted.file);
   }
@@ -166,7 +173,7 @@ class Logger {
     const device = detectDevice(req.headers['user-agent']);
     const browser = detectBrowser(req.headers['user-agent']);
     const ip = getClientIP(req);
-    
+
     const metadata = {
       action,
       userId,
@@ -176,16 +183,16 @@ class Logger {
       userAgent: req.headers['user-agent'],
       method: req.method,
       url: req.originalUrl,
-      ...additionalData
+      ...additionalData,
     };
-    
+
     this.info(`User Activity: ${action}`, metadata);
   }
 
   logAPIRequest(req, res, responseTime) {
     const device = detectDevice(req.headers['user-agent']);
     const ip = getClientIP(req);
-    
+
     const metadata = {
       method: req.method,
       url: req.originalUrl,
@@ -193,9 +200,9 @@ class Logger {
       responseTime: `${responseTime}ms`,
       device,
       ip,
-      userAgent: req.headers['user-agent']
+      userAgent: req.headers['user-agent'],
     };
-    
+
     const level = res.statusCode >= 400 ? 'WARN' : 'INFO';
     this._log(level, `API Request: ${req.method} ${req.originalUrl}`, metadata);
   }
@@ -203,7 +210,7 @@ class Logger {
   logRecipeGeneration(req, userId, recipeData, processingTime) {
     const device = detectDevice(req.headers['user-agent']);
     const ip = getClientIP(req);
-    
+
     const metadata = {
       userId,
       device,
@@ -213,9 +220,9 @@ class Logger {
       ingredients: recipeData.ingredients?.length || 0,
       cookingTime: recipeData.cookingTime,
       difficulty: recipeData.difficulty,
-      dietaryTags: recipeData.dietaryTags
+      dietaryTags: recipeData.dietaryTags,
     };
-    
+
     this.info('Recipe Generated', metadata);
   }
 
@@ -223,16 +230,16 @@ class Logger {
     const metadata = {
       error: error.message,
       stack: error.stack,
-      ...additionalContext
+      ...additionalContext,
     };
-    
+
     if (req) {
       metadata.method = req.method;
       metadata.url = req.originalUrl;
       metadata.device = detectDevice(req.headers['user-agent']);
       metadata.ip = getClientIP(req);
     }
-    
+
     this.error(`Application Error: ${error.message}`, metadata);
   }
 
@@ -242,9 +249,9 @@ class Logger {
       collection,
       success,
       duration: `${duration}ms`,
-      ...additionalData
+      ...additionalData,
     };
-    
+
     const level = success ? 'DEBUG' : 'ERROR';
     this._log(level, `Database ${operation} on ${collection}`, metadata);
   }
@@ -261,5 +268,5 @@ module.exports = {
   logger,
   detectDevice,
   detectBrowser,
-  getClientIP
+  getClientIP,
 };

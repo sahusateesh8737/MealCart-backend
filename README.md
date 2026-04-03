@@ -141,11 +141,13 @@ docker run -p 5000:5000 --env-file .env mealcart-backend:latest
 ### Cloud Platforms
 
 #### Vercel/Netlify (Serverless)
+
 - Configure environment variables in platform dashboard
 - Deploy directly from GitHub
 - Auto-scales based on traffic
 
 #### AWS ECS / Google Cloud Run
+
 ```bash
 # Build and push to registry
 docker build -t your-registry/mealcart-backend:latest .
@@ -156,6 +158,7 @@ docker push your-registry/mealcart-backend:latest
 ```
 
 #### DigitalOcean App Platform
+
 - Connect GitHub repository
 - Set environment variables
 - Configure build and run commands
@@ -164,23 +167,27 @@ docker push your-registry/mealcart-backend:latest
 ## 📡 API Endpoints
 
 ### Health Check
+
 ```http
 GET /health
 ```
 
 ### Authentication
+
 ```http
 POST /api/auth/register      # Register new user
 POST /api/auth/login         # Login user
 ```
 
 ### Users
+
 ```http
 GET    /api/users/profile    # Get user profile (auth required)
 PUT    /api/users/profile    # Update profile (auth required)
 ```
 
 ### Recipes
+
 ```http
 GET    /api/recipes/search              # Search recipes
 POST   /api/recipes/save                # Save recipe (auth required)
@@ -189,12 +196,14 @@ DELETE /api/recipes/:id                 # Delete recipe (auth required)
 ```
 
 ### AI Features
+
 ```http
 POST /api/ai/generate-recipe            # Generate recipe with AI (auth required)
 POST /api/gemini/suggest                # Get AI suggestions (auth required)
 ```
 
 ### Grocery Lists
+
 ```http
 POST /api/grocerylist/generate          # Generate grocery list (auth required)
 ```
@@ -259,6 +268,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 👤 Author
 
 **Satish Sahu**
+
 - GitHub: [@sahusateesh8737](https://github.com/sahusateesh8737)
 
 ## 🙏 Acknowledgments

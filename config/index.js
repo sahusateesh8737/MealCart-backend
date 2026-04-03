@@ -14,14 +14,10 @@ dotenv.config();
  * @throws {Error} if any required variable is missing
  */
 const validateEnv = () => {
-  const required = [
-    'MONGODB_URI',
-    'JWT_SECRET',
-    'GEMINI_API_KEY'
-  ];
+  const required = ['MONGODB_URI', 'JWT_SECRET', 'GEMINI_API_KEY'];
 
-  const missing = required.filter(key => !process.env[key]);
-  
+  const missing = required.filter((key) => !process.env[key]);
+
   if (missing.length > 0) {
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
   }
@@ -38,7 +34,11 @@ const config = {
   isProduction: process.env.NODE_ENV === 'production',
   isDevelopment: process.env.NODE_ENV === 'development',
   isTest: process.env.NODE_ENV === 'test',
-  isServerless: !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NETLIFY),
+  isServerless: !!(
+    process.env.VERCEL ||
+    process.env.AWS_LAMBDA_FUNCTION_NAME ||
+    process.env.NETLIFY
+  ),
 
   // Server
   server: {
@@ -78,11 +78,6 @@ const config = {
       fallbackModel: 'gemini-1.5-flash',
       maxRetries: 3,
       timeout: 30000,
-    },
-    spoonacular: {
-      apiKey: process.env.SPOONACULAR_API_KEY,
-      baseUrl: 'https://api.spoonacular.com',
-      timeout: 10000,
     },
     unsplash: {
       accessKey: process.env.UNSPLASH_ACCESS_KEY,

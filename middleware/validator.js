@@ -38,15 +38,9 @@ const validateRequired = (fields) => {
 const validateObjectId = (paramName = 'id') => {
   return (req, res, next) => {
     const id = req.params[paramName];
-    
+
     if (!id || !/^[0-9a-fA-F]{24}$/.test(id)) {
-      return next(
-        new AppError(
-          `Invalid ${paramName} format`,
-          400,
-          'INVALID_ID'
-        )
-      );
+      return next(new AppError(`Invalid ${paramName} format`, 400, 'INVALID_ID'));
     }
 
     next();

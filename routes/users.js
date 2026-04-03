@@ -15,38 +15,41 @@ const convertTemporaryRecipe = async (tempId, recipeData, userId) => {
   logger.debug('Converting temporary recipe to permanent', {
     tempId,
     userId,
-    recipeName: recipeData?.name
+    recipeName: recipeData?.name,
   });
 
   const newRecipe = new Recipe({
     externalId: `temp_favorite_${Date.now()}`,
     name: recipeData.name || 'Untitled Recipe',
     description: recipeData.description || '',
-    ingredients: Array.isArray(recipeData.ingredients) ? 
-      recipeData.ingredients.map(ingredient => {
-        if (typeof ingredient === 'string') {
+    ingredients: Array.isArray(recipeData.ingredients)
+      ? recipeData.ingredients.map((ingredient) => {
+          if (typeof ingredient === 'string') {
+            return {
+              name: ingredient,
+              amount: '1',
+              unit: 'item',
+              original: ingredient,
+            };
+          }
           return {
-            name: ingredient,
-            amount: '1',
-            unit: 'item',
-            original: ingredient
+            name: ingredient.name || ingredient.ingredient || '',
+            amount: ingredient.amount || '1',
+            unit: ingredient.unit || 'item',
+            original: ingredient.original || ingredient.name || ingredient.ingredient || '',
           };
-        }
-        return {
-          name: ingredient.name || ingredient.ingredient || '',
-          amount: ingredient.amount || '1',
-          unit: ingredient.unit || 'item',
-          original: ingredient.original || ingredient.name || ingredient.ingredient || ''
-        };
-      }) : [],
-    instructions: Array.isArray(recipeData.instructions) ?
-      recipeData.instructions.map(step => {
-        if (typeof step === 'object' && step.instruction) {
-          return step.instruction;
-        }
-        return step.toString();
-      }).join('\n') : 
-      (recipeData.instructions || 'No instructions provided'),
+        })
+      : [],
+    instructions: Array.isArray(recipeData.instructions)
+      ? recipeData.instructions
+          .map((step) => {
+            if (typeof step === 'object' && step.instruction) {
+              return step.instruction;
+            }
+            return step.toString();
+          })
+          .join('\n')
+      : recipeData.instructions || 'No instructions provided',
     cookingTime: recipeData.cookingTime || 30,
     preparationTime: recipeData.prepTime || recipeData.preparationTime || 15,
     difficulty: recipeData.difficulty || 'medium',
@@ -57,18 +60,18 @@ const convertTemporaryRecipe = async (tempId, recipeData, userId) => {
     source: recipeData.source || 'ai_generation',
     isAIGenerated: true,
     searchQuery: recipeData.searchQuery || '',
-    groceryList: recipeData.groceryList || []
+    groceryList: recipeData.groceryList || [],
   });
-  
+
   const savedRecipe = await newRecipe.save();
-  
+
   logger.info('Temporary recipe converted successfully', {
     tempId,
     newId: savedRecipe._id,
     userId,
-    recipeName: savedRecipe.name
+    recipeName: savedRecipe.name,
   });
-  
+
   return savedRecipe;
 };
 
@@ -84,14 +87,14 @@ router.get('/profile', auth, async (req, res) => {
 
     res.json({
       success: true,
-      data: user
+      data: user,
     });
   } catch (error) {
     console.error('Error fetching user profile:', error);
     res.status(500).json({
       success: false,
       message: 'Error fetching user profile',
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -99,22 +102,15 @@ router.get('/profile', auth, async (req, res) => {
 // PUT /api/users/profile - Update user profile
 router.put('/profile', auth, async (req, res) => {
   try {
-    const {
-      username,
-      bio,
-      profileImage,
-      dietaryPreferences,
-      allergens,
-      skillLevel,
-      preferences
-    } = req.body;
+    const { username, bio, profileImage, dietaryPreferences, allergens, skillLevel, preferences } =
+      req.body;
 
     const user = await User.findById(req.user.id);
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'User not found',
       });
     }
 
@@ -124,7 +120,7 @@ router.put('/profile', auth, async (req, res) => {
       if (existingUser) {
         return res.status(400).json({
           success: false,
-          message: 'Username already taken'
+          message: 'Username already taken',
         });
       }
       user.username = username;
@@ -147,14 +143,14 @@ router.put('/profile', auth, async (req, res) => {
     res.json({
       success: true,
       data: updatedUser,
-      message: 'Profile updated successfully'
+      message: 'Profile updated successfully',
     });
   } catch (error) {
     console.error('Error updating profile:', error);
     res.status(500).json({
       success: false,
       message: 'Error updating profile',
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -176,26 +172,28 @@ router.get('/favorites', auth, async (req, res) => {
       limit,
       skip,
       origin: req.headers.origin,
-      userAgent: req.headers['user-agent']?.substring(0, 50)
+      userAgent: req.headers['user-agent']?.substring(0, 50),
     });
 
     const user = await User.findById(req.user.id);
-    
+
     if (!user) {
       console.log('[Favorites] User not found:', req.user.id);
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'User not found',
       });
     }
 
     // Get total count before pagination
     const totalFavorites = user.favoriteRecipes ? user.favoriteRecipes.length : 0;
-    
+
     console.log('[Favorites] User has favorite IDs:', {
       userId: req.user.id,
       totalFavorites,
-      favoriteIds: user.favoriteRecipes ? user.favoriteRecipes.slice(0, 5).map(id => id.toString()) : []
+      favoriteIds: user.favoriteRecipes
+        ? user.favoriteRecipes.slice(0, 5).map((id) => id.toString())
+        : [],
     });
 
     // Populate favorites with pagination
@@ -206,15 +204,15 @@ router.get('/favorites', auth, async (req, res) => {
         skip: skip,
         limit: limit,
         sort: { createdAt: -1 },
-        strictPopulate: false
-      }
+        strictPopulate: false,
+      },
     });
 
     const populatedRecipes = user.favoriteRecipes || [];
     console.log('[Favorites] Populated recipes:', {
       userId: req.user.id,
       populatedCount: populatedRecipes.length,
-      recipeNames: populatedRecipes.slice(0, 3).map(r => r?.name || 'unnamed')
+      recipeNames: populatedRecipes.slice(0, 3).map((r) => r?.name || 'unnamed'),
     });
 
     const response = {
@@ -225,15 +223,15 @@ router.get('/favorites', auth, async (req, res) => {
           currentPage: page,
           totalPages: Math.ceil(totalFavorites / limit),
           totalRecipes: totalFavorites,
-          limit: limit
-        }
-      }
+          limit: limit,
+        },
+      },
     };
 
     console.log('[Favorites] Sending response:', {
       userId: req.user.id,
       recipesCount: response.data.recipes.length,
-      paginationInfo: response.data.pagination
+      paginationInfo: response.data.pagination,
     });
 
     res.json(response);
@@ -241,12 +239,12 @@ router.get('/favorites', auth, async (req, res) => {
     console.error('[Favorites] Error:', {
       userId: req.user?.id,
       error: error.message,
-      stack: error.stack?.substring(0, 200)
+      stack: error.stack?.substring(0, 200),
     });
     res.status(500).json({
       success: false,
       message: 'Error fetching favorites',
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -256,132 +254,133 @@ router.post('/favorites/:recipeId', auth, async (req, res) => {
   const startTime = Date.now();
   try {
     const recipeId = req.params.recipeId;
-    
+
     // Validate recipeId is provided
     if (!recipeId || recipeId === 'undefined' || recipeId === 'null') {
       logger.warn('Invalid or missing recipe ID', {
         userId: req.user.id,
         recipeId,
-        message: 'Frontend sent undefined/null recipe ID'
+        message: 'Frontend sent undefined/null recipe ID',
       });
-      
+
       return res.status(400).json({
         success: false,
         message: 'Recipe ID is required and must be valid',
         error: 'INVALID_RECIPE_ID',
-        details: 'The recipe ID was not provided or is invalid. Please ensure the recipe has a valid ID before adding to favorites.'
+        details:
+          'The recipe ID was not provided or is invalid. Please ensure the recipe has a valid ID before adding to favorites.',
       });
     }
-    
+
     logger.logUserActivity('ADD_FAVORITE_ATTEMPT', req, req.user.id, {
       recipeId,
       isTemporary: recipeId.startsWith('temp_'),
-      hasRecipeData: !!req.body.recipeData
+      hasRecipeData: !!req.body.recipeData,
     });
-    
+
     // Check if this is a temporary ID (non-MongoDB format ID)
     if (recipeId.startsWith('temp_')) {
       const { recipeData } = req.body;
-      
+
       if (!recipeData) {
         logger.warn('Missing recipe data for temporary recipe', {
           userId: req.user.id,
-          recipeId
+          recipeId,
         });
-        
+
         return res.status(400).json({
           success: false,
           message: 'Recipe data must be provided when saving a temporary recipe',
-          error: 'MISSING_RECIPE_DATA'
+          error: 'MISSING_RECIPE_DATA',
         });
       }
-      
+
       // Convert temporary recipe to permanent
       const savedRecipe = await convertTemporaryRecipe(recipeId, recipeData, req.user.id);
-      
+
       // Add to user's favorites
       const user = await User.findById(req.user.id);
-      
+
       if (user.favoriteRecipes.includes(savedRecipe._id.toString())) {
         logger.warn('Recipe already in favorites after conversion', {
           userId: req.user.id,
-          recipeId: savedRecipe._id
+          recipeId: savedRecipe._id,
         });
-        
+
         return res.status(400).json({
           success: false,
           message: 'Recipe already in favorites',
-          error: 'RECIPE_ALREADY_IN_FAVORITES'
+          error: 'RECIPE_ALREADY_IN_FAVORITES',
         });
       }
-      
+
       user.favoriteRecipes.push(savedRecipe._id);
       await user.save();
-      
+
       const processingTime = Date.now() - startTime;
       logger.logUserActivity('ADD_FAVORITE_SUCCESS_TEMP', req, req.user.id, {
         originalId: recipeId,
         newId: savedRecipe._id,
         recipeName: savedRecipe.name,
-        processingTime: `${processingTime}ms`
+        processingTime: `${processingTime}ms`,
       });
-      
+
       return res.json({
         success: true,
         message: 'Recipe saved and added to favorites',
         recipeId: savedRecipe._id,
-        recipeName: savedRecipe.name
+        recipeName: savedRecipe.name,
       });
     }
-    
+
     // Validate regular MongoDB ObjectId format
     if (!isValidObjectId(recipeId)) {
       logger.warn('Invalid recipe ID format', {
         userId: req.user.id,
-        recipeId
+        recipeId,
       });
-      
+
       return res.status(400).json({
         success: false,
         message: 'Invalid recipe ID format',
-        error: 'INVALID_RECIPE_ID'
+        error: 'INVALID_RECIPE_ID',
       });
     }
-    
+
     // Normal flow for regular MongoDB IDs
     logger.debug('Adding regular recipe to favorites', {
       userId: req.user.id,
-      recipeId
+      recipeId,
     });
-    
+
     const recipe = await Recipe.findById(recipeId);
-    
+
     if (!recipe) {
       logger.warn('Recipe not found for favorites', {
         userId: req.user.id,
-        recipeId
+        recipeId,
       });
-      
+
       return res.status(404).json({
         success: false,
         message: 'Recipe not found',
-        error: 'RECIPE_NOT_FOUND'
+        error: 'RECIPE_NOT_FOUND',
       });
     }
 
     const user = await User.findById(req.user.id);
-    
+
     if (user.favoriteRecipes.includes(recipeId)) {
       logger.warn('Recipe already in favorites', {
         userId: req.user.id,
         recipeId,
-        recipeName: recipe.name
+        recipeName: recipe.name,
       });
-      
+
       return res.status(400).json({
         success: false,
         message: 'Recipe already in favorites',
-        error: 'RECIPE_ALREADY_IN_FAVORITES'
+        error: 'RECIPE_ALREADY_IN_FAVORITES',
       });
     }
 
@@ -392,13 +391,13 @@ router.post('/favorites/:recipeId', auth, async (req, res) => {
     logger.logUserActivity('ADD_FAVORITE_SUCCESS', req, req.user.id, {
       recipeId,
       recipeName: recipe.name,
-      processingTime: `${processingTime}ms`
+      processingTime: `${processingTime}ms`,
     });
 
     res.json({
       success: true,
       message: 'Recipe added to favorites',
-      recipeName: recipe.name
+      recipeName: recipe.name,
     });
   } catch (error) {
     const processingTime = Date.now() - startTime;
@@ -406,13 +405,13 @@ router.post('/favorites/:recipeId', auth, async (req, res) => {
       action: 'ADD_FAVORITE',
       userId: req.user?.id,
       recipeId: req.params.recipeId,
-      processingTime: `${processingTime}ms`
+      processingTime: `${processingTime}ms`,
     });
-    
+
     res.status(500).json({
       success: false,
       message: 'Error adding to favorites',
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -422,26 +421,27 @@ router.delete('/favorites/:recipeId', auth, async (req, res) => {
   const startTime = Date.now();
   try {
     const recipeId = req.params.recipeId;
-    
+
     // Validate recipeId is provided
     if (!recipeId || recipeId === 'undefined' || recipeId === 'null') {
       logger.warn('Invalid or missing recipe ID for removal', {
         userId: req.user.id,
         recipeId,
-        message: 'Frontend sent undefined/null recipe ID'
+        message: 'Frontend sent undefined/null recipe ID',
       });
-      
+
       return res.status(400).json({
         success: false,
         message: 'Recipe ID is required and must be valid',
         error: 'INVALID_RECIPE_ID',
-        details: 'The recipe ID was not provided or is invalid. Please ensure the recipe has a valid ID.'
+        details:
+          'The recipe ID was not provided or is invalid. Please ensure the recipe has a valid ID.',
       });
     }
-    
+
     logger.logUserActivity('REMOVE_FAVORITE_ATTEMPT', req, req.user.id, {
       recipeId,
-      isTemporary: recipeId.startsWith('temp_')
+      isTemporary: recipeId.startsWith('temp_'),
     });
 
     // Check if this is a temporary ID
@@ -449,13 +449,13 @@ router.delete('/favorites/:recipeId', auth, async (req, res) => {
       logger.warn('Attempt to remove temporary recipe from favorites', {
         userId: req.user.id,
         recipeId,
-        message: 'Temporary recipes cannot be removed from favorites as they are not saved'
+        message: 'Temporary recipes cannot be removed from favorites as they are not saved',
       });
-      
+
       return res.status(400).json({
         success: false,
         message: 'Temporary recipes cannot be removed from favorites. Save the recipe first.',
-        error: 'TEMPORARY_RECIPE_REMOVAL'
+        error: 'TEMPORARY_RECIPE_REMOVAL',
       });
     }
 
@@ -464,33 +464,33 @@ router.delete('/favorites/:recipeId', auth, async (req, res) => {
       logger.warn('Invalid recipe ID format for favorites removal', {
         userId: req.user.id,
         recipeId,
-        format: 'Invalid ObjectId format'
+        format: 'Invalid ObjectId format',
       });
-      
+
       return res.status(400).json({
         success: false,
         message: 'Invalid recipe ID format',
-        error: 'INVALID_RECIPE_ID'
+        error: 'INVALID_RECIPE_ID',
       });
     }
-    
+
     const user = await User.findById(req.user.id);
-    
+
     // Check if recipe is actually in favorites
-    const favoriteIndex = user.favoriteRecipes.findIndex(fav => fav.toString() === recipeId);
+    const favoriteIndex = user.favoriteRecipes.findIndex((fav) => fav.toString() === recipeId);
     if (favoriteIndex === -1) {
       logger.warn('Recipe not found in user favorites', {
         userId: req.user.id,
-        recipeId
+        recipeId,
       });
-      
+
       return res.status(404).json({
         success: false,
         message: 'Recipe not found in favorites',
-        error: 'RECIPE_NOT_IN_FAVORITES'
+        error: 'RECIPE_NOT_IN_FAVORITES',
       });
     }
-    
+
     // Get recipe name for logging (optional, don't fail if recipe doesn't exist)
     let recipeName = 'Unknown Recipe';
     try {
@@ -501,10 +501,10 @@ router.delete('/favorites/:recipeId', auth, async (req, res) => {
     } catch (recipeError) {
       logger.debug('Could not fetch recipe name for logging', {
         recipeId,
-        error: recipeError.message
+        error: recipeError.message,
       });
     }
-    
+
     user.favoriteRecipes.pull(recipeId);
     await user.save();
 
@@ -512,13 +512,13 @@ router.delete('/favorites/:recipeId', auth, async (req, res) => {
     logger.logUserActivity('REMOVE_FAVORITE_SUCCESS', req, req.user.id, {
       recipeId,
       recipeName,
-      processingTime: `${processingTime}ms`
+      processingTime: `${processingTime}ms`,
     });
 
     res.json({
       success: true,
       message: 'Recipe removed from favorites',
-      recipeName
+      recipeName,
     });
   } catch (error) {
     const processingTime = Date.now() - startTime;
@@ -526,13 +526,13 @@ router.delete('/favorites/:recipeId', auth, async (req, res) => {
       action: 'REMOVE_FAVORITE',
       userId: req.user?.id,
       recipeId: req.params.recipeId,
-      processingTime: `${processingTime}ms`
+      processingTime: `${processingTime}ms`,
     });
-    
+
     res.status(500).json({
       success: false,
       message: 'Error removing from favorites',
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -541,18 +541,17 @@ router.delete('/favorites/:recipeId', auth, async (req, res) => {
 router.get('/meal-plan', auth, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    
-    const user = await User.findById(req.user.id)
-      .populate({
-        path: 'mealPlan.breakfast mealPlan.lunch mealPlan.dinner mealPlan.snacks',
-        select: 'title images cookingTime prepTime difficulty averageRating'
-      });
+
+    const user = await User.findById(req.user.id).populate({
+      path: 'mealPlan.breakfast mealPlan.lunch mealPlan.dinner mealPlan.snacks',
+      select: 'name images cookingTime prepTime difficulty averageRating',
+    });
 
     let mealPlan = user.mealPlan;
 
     // Filter by date range if provided
     if (startDate || endDate) {
-      mealPlan = user.mealPlan.filter(plan => {
+      mealPlan = user.mealPlan.filter((plan) => {
         const planDate = new Date(plan.date);
         const start = startDate ? new Date(startDate) : new Date('1900-01-01');
         const end = endDate ? new Date(endDate) : new Date('2100-01-01');
@@ -562,14 +561,14 @@ router.get('/meal-plan', auth, async (req, res) => {
 
     res.json({
       success: true,
-      data: mealPlan.sort((a, b) => new Date(a.date) - new Date(b.date))
+      data: mealPlan.sort((a, b) => new Date(a.date) - new Date(b.date)),
     });
   } catch (error) {
     console.error('Error fetching meal plan:', error);
     res.status(500).json({
       success: false,
       message: 'Error fetching meal plan',
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -579,49 +578,275 @@ router.post('/meal-plan', auth, async (req, res) => {
   try {
     const { date, breakfast, lunch, dinner, snacks } = req.body;
 
+    console.log('[MealPlan] Request:', {
+      userId: req.user.id,
+      date,
+      updateFields: { breakfast, lunch, dinner, snacks },
+    });
+
     if (!date) {
       return res.status(400).json({
         success: false,
-        message: 'Date is required'
+        message: 'Date is required',
       });
     }
 
     const user = await User.findById(req.user.id);
-    
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
     // Check if meal plan for this date already exists
+    // Compare YYYY-MM-DD parts to avoid timezone mismatch issues
+    const targetDateStr = new Date(date).toISOString().split('T')[0];
+
     const existingPlanIndex = user.mealPlan.findIndex(
-      plan => plan.date.toDateString() === new Date(date).toDateString()
+      (plan) => new Date(plan.date).toISOString().split('T')[0] === targetDateStr
     );
 
-    const mealPlanEntry = {
-      date: new Date(date),
-      breakfast: breakfast || null,
-      lunch: lunch || null,
-      dinner: dinner || null,
-      snacks: snacks || []
-    };
+    let mealPlanEntry;
 
     if (existingPlanIndex !== -1) {
-      // Update existing plan
+      console.log(`[MealPlan] Updating existing plan for ${targetDateStr}`);
+      // Update existing plan - preserving existing values if not provided in request
+      const existing = user.mealPlan[existingPlanIndex];
+
+      mealPlanEntry = {
+        date: existing.date,
+        breakfast: breakfast !== undefined ? breakfast || null : existing.breakfast,
+        lunch: lunch !== undefined ? lunch || null : existing.lunch,
+        dinner: dinner !== undefined ? dinner || null : existing.dinner,
+        snacks: snacks !== undefined ? snacks || [] : existing.snacks,
+      };
+
       user.mealPlan[existingPlanIndex] = mealPlanEntry;
+      // CRITICAL: Mark array as modified so Mongoose saves the change
+      user.markModified('mealPlan');
     } else {
+      console.log(`[MealPlan] Creating new plan for ${targetDateStr}`);
       // Add new plan
+      mealPlanEntry = {
+        date: new Date(date),
+        breakfast: breakfast || null,
+        lunch: lunch || null,
+        dinner: dinner || null,
+        snacks: snacks || [],
+      };
       user.mealPlan.push(mealPlanEntry);
     }
 
     await user.save();
+    console.log('[MealPlan] Saved successfully');
 
     res.json({
       success: true,
       message: 'Meal plan updated successfully',
-      data: mealPlanEntry
+      data: mealPlanEntry,
     });
   } catch (error) {
     console.error('Error updating meal plan:', error);
     res.status(500).json({
       success: false,
       message: 'Error updating meal plan',
-      error: error.message
+      error: error.message,
+    });
+  }
+});
+
+// POST /api/users/meal-plan/save-ai-plan - Batch save AI meal plan with automatic recipe creation
+router.post('/meal-plan/save-ai-plan', auth, async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const { plan, shoppingList, startDate } = req.body;
+
+    if (!plan || !Array.isArray(plan) || !startDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid plan array and start date are required',
+      });
+    }
+
+    const start = new Date(startDate);
+    const user = await User.findById(req.user.id);
+    const createdRecipeIds = [];
+
+    // Helper to create or find recipe
+    const getOrCreateRecipe = async (mealData, type) => {
+      // Check if user already has a recipe with this exact name
+      let recipe = await Recipe.findOne({
+        userId: user._id,
+        name: mealData.name,
+      });
+
+      if (!recipe) {
+        // Create new recipe
+        const processedIngredients = (mealData.ingredients || []).map((ing) => ({
+          name: ing,
+          amount: '1',
+          unit: 'serving',
+          original: ing,
+        }));
+
+        recipe = new Recipe({
+          externalId: `ai_plan_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+          name: mealData.name,
+          description: mealData.description || `AI generated meal for ${mealData.name}`,
+          ingredients: processedIngredients,
+          instructions: Array.isArray(mealData.instructions)
+            ? mealData.instructions.join('\n')
+            : mealData.instructions || 'No instructions provided',
+          cookingTime: mealData.cookingTime || 30,
+          preparationTime: 15,
+          servings: 1, // Meal plan usually for one person or family unit
+          difficulty: 'medium',
+          nutrition: {
+            calories: mealData.calories || 0,
+          },
+          userId: user._id,
+          isPublic: false,
+          source: 'ai_generation',
+          isAIGenerated: true,
+          groceryList: mealData.ingredients || [],
+          mealType: type ? [type] : mealData.mealType || [],
+        });
+
+        await recipe.save();
+        createdRecipeIds.push(recipe._id);
+      }
+      return recipe._id;
+    };
+
+    // Process the plan day by day
+    for (const dayPlan of plan) {
+      // Calculate date for this day (day 1 = start date)
+      const currentDayDate = new Date(start);
+      currentDayDate.setDate(start.getDate() + (dayPlan.day - 1));
+
+      const mealPlanEntry = {
+        date: currentDayDate,
+        breakfast: null,
+        lunch: null,
+        dinner: null,
+        snacks: [],
+      };
+
+      // Process meals for this day
+      if (dayPlan.meals) {
+        if (dayPlan.meals.breakfast) {
+          mealPlanEntry.breakfast = await getOrCreateRecipe(dayPlan.meals.breakfast, 'breakfast');
+        }
+        if (dayPlan.meals.lunch) {
+          mealPlanEntry.lunch = await getOrCreateRecipe(dayPlan.meals.lunch, 'lunch');
+        }
+        if (dayPlan.meals.dinner) {
+          mealPlanEntry.dinner = await getOrCreateRecipe(dayPlan.meals.dinner, 'dinner');
+        }
+        if (dayPlan.meals.snack) {
+          const snackId = await getOrCreateRecipe(dayPlan.meals.snack, 'snack');
+          mealPlanEntry.snacks.push(snackId);
+        }
+      }
+
+      // Update or add to user's meal plan
+      const existingPlanIndex = user.mealPlan.findIndex(
+        (p) => p.date.toDateString() === currentDayDate.toDateString()
+      );
+
+      if (existingPlanIndex !== -1) {
+        user.mealPlan[existingPlanIndex] = mealPlanEntry;
+      } else {
+        user.mealPlan.push(mealPlanEntry);
+      }
+    }
+
+    // Valid categories from User model
+    const VALID_CATEGORIES = ['produce', 'dairy', 'meat', 'pantry', 'frozen', 'other'];
+    const mapToValidCategory = (aiCategory) => {
+      if (!aiCategory) return 'other';
+      const cat = aiCategory.toLowerCase();
+
+      // Direct mapping
+      if (VALID_CATEGORIES.includes(cat)) return cat;
+
+      // Keyword mapping
+      if (cat.includes('vegetable') || cat.includes('fruit') || cat.includes('herb'))
+        return 'produce';
+      if (
+        cat.includes('cheese') ||
+        cat.includes('milk') ||
+        cat.includes('yogurt') ||
+        cat.includes('egg')
+      )
+        return 'dairy';
+      if (
+        cat.includes('chicken') ||
+        cat.includes('beef') ||
+        cat.includes('pork') ||
+        cat.includes('fish') ||
+        cat.includes('seafood')
+      )
+        return 'meat';
+      if (
+        cat.includes('canned') ||
+        cat.includes('spice') ||
+        cat.includes('grain') ||
+        cat.includes('oil') ||
+        cat.includes('baking')
+      )
+        return 'pantry';
+      if (cat.includes('ice') || cat.includes('frozen')) return 'frozen';
+
+      return 'other';
+    };
+
+    // Process Shopping List (Add to existing)
+    if (shoppingList && Array.isArray(shoppingList)) {
+      shoppingList.forEach((categoryGroup) => {
+        if (categoryGroup.items) {
+          const validCategory = mapToValidCategory(categoryGroup.category);
+
+          categoryGroup.items.forEach((itemName) => {
+            const existingItem = user.shoppingList.find(
+              (i) => i.name.toLowerCase() === itemName.toLowerCase()
+            );
+            if (existingItem) {
+              existingItem.amount += 1;
+            } else {
+              user.shoppingList.push({
+                name: itemName,
+                category: validCategory,
+                amount: 1,
+                unit: 'item',
+              });
+            }
+          });
+        }
+      });
+    }
+
+    await user.save();
+
+    logger.logUserActivity('SAVE_AI_MEAL_PLAN', req, user._id, {
+      daysCount: plan.length,
+      recipesCreated: createdRecipeIds.length,
+      processingTime: `${Date.now() - startTime}ms`,
+    });
+
+    res.json({
+      success: true,
+      message: 'Meal plan saved successfully',
+      data: {
+        daysProcessed: plan.length,
+        recipesCreated: createdRecipeIds.length,
+      },
+    });
+  } catch (error) {
+    console.error('Error saving AI meal plan:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error saving meal plan',
+      error: error.message,
     });
   }
 });
@@ -632,21 +857,21 @@ router.delete('/meal-plan/:planId', auth, async (req, res) => {
     const { planId } = req.params;
 
     const user = await User.findById(req.user.id);
-    
+
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'User not found',
       });
     }
 
     // Find and remove the meal plan entry
     const mealPlanEntry = user.mealPlan.id(planId);
-    
+
     if (!mealPlanEntry) {
       return res.status(404).json({
         success: false,
-        message: 'Meal plan entry not found'
+        message: 'Meal plan entry not found',
       });
     }
 
@@ -655,14 +880,14 @@ router.delete('/meal-plan/:planId', auth, async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Meal plan entry deleted successfully'
+      message: 'Meal plan entry deleted successfully',
     });
   } catch (error) {
     console.error('Error deleting meal plan entry:', error);
     res.status(500).json({
       success: false,
       message: 'Error deleting meal plan entry',
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -671,17 +896,17 @@ router.delete('/meal-plan/:planId', auth, async (req, res) => {
 router.get('/shopping-list', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    
+
     res.json({
       success: true,
-      data: user.shoppingList.sort((a, b) => a.category.localeCompare(b.category))
+      data: user.shoppingList.sort((a, b) => a.category.localeCompare(b.category)),
     });
   } catch (error) {
     console.error('Error fetching shopping list:', error);
     res.status(500).json({
       success: false,
       message: 'Error fetching shopping list',
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -694,15 +919,15 @@ router.post('/shopping-list', auth, async (req, res) => {
     if (!name) {
       return res.status(400).json({
         success: false,
-        message: 'Item name is required'
+        message: 'Item name is required',
       });
     }
 
     const user = await User.findById(req.user.id);
-    
+
     // Check if item already exists
-    const existingItem = user.shoppingList.find(item => 
-      item.name.toLowerCase() === name.toLowerCase()
+    const existingItem = user.shoppingList.find(
+      (item) => item.name.toLowerCase() === name.toLowerCase()
     );
 
     if (existingItem) {
@@ -716,14 +941,14 @@ router.post('/shopping-list', auth, async (req, res) => {
     res.json({
       success: true,
       message: 'Item added to shopping list',
-      data: user.shoppingList
+      data: user.shoppingList,
     });
   } catch (error) {
     console.error('Error adding to shopping list:', error);
     res.status(500).json({
       success: false,
       message: 'Error adding to shopping list',
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -739,7 +964,7 @@ router.put('/shopping-list/:itemId', auth, async (req, res) => {
     if (!item) {
       return res.status(404).json({
         success: false,
-        message: 'Shopping list item not found'
+        message: 'Shopping list item not found',
       });
     }
 
@@ -752,14 +977,14 @@ router.put('/shopping-list/:itemId', auth, async (req, res) => {
     res.json({
       success: true,
       message: 'Shopping list item updated',
-      data: item
+      data: item,
     });
   } catch (error) {
     console.error('Error updating shopping list item:', error);
     res.status(500).json({
       success: false,
       message: 'Error updating shopping list item',
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -773,14 +998,14 @@ router.delete('/shopping-list/:itemId', auth, async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Item removed from shopping list'
+      message: 'Item removed from shopping list',
     });
   } catch (error) {
     console.error('Error removing shopping list item:', error);
     res.status(500).json({
       success: false,
       message: 'Error removing shopping list item',
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -789,7 +1014,7 @@ router.delete('/shopping-list/:itemId', auth, async (req, res) => {
 router.get('/pantry', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    
+
     // Sort by expiration date (nearest first) and category
     const pantry = user.pantry.sort((a, b) => {
       if (a.expirationDate && b.expirationDate) {
@@ -802,14 +1027,14 @@ router.get('/pantry', auth, async (req, res) => {
 
     res.json({
       success: true,
-      data: pantry
+      data: pantry,
     });
   } catch (error) {
     console.error('Error fetching pantry:', error);
     res.status(500).json({
       success: false,
       message: 'Error fetching pantry',
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -822,18 +1047,18 @@ router.post('/pantry', auth, async (req, res) => {
     if (!name) {
       return res.status(400).json({
         success: false,
-        message: 'Item name is required'
+        message: 'Item name is required',
       });
     }
 
     const user = await User.findById(req.user.id);
-    
+
     user.pantry.push({
       name,
       amount,
       unit,
       expirationDate: expirationDate ? new Date(expirationDate) : null,
-      category
+      category,
     });
 
     await user.save();
@@ -841,14 +1066,14 @@ router.post('/pantry', auth, async (req, res) => {
     res.json({
       success: true,
       message: 'Item added to pantry',
-      data: user.pantry[user.pantry.length - 1]
+      data: user.pantry[user.pantry.length - 1],
     });
   } catch (error) {
     console.error('Error adding to pantry:', error);
     res.status(500).json({
       success: false,
       message: 'Error adding to pantry',
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -864,7 +1089,7 @@ router.put('/pantry/:itemId', auth, async (req, res) => {
     if (!item) {
       return res.status(404).json({
         success: false,
-        message: 'Pantry item not found'
+        message: 'Pantry item not found',
       });
     }
 
@@ -881,14 +1106,14 @@ router.put('/pantry/:itemId', auth, async (req, res) => {
     res.json({
       success: true,
       message: 'Pantry item updated',
-      data: item
+      data: item,
     });
   } catch (error) {
     console.error('Error updating pantry item:', error);
     res.status(500).json({
       success: false,
       message: 'Error updating pantry item',
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -902,14 +1127,14 @@ router.delete('/pantry/:itemId', auth, async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Item removed from pantry'
+      message: 'Item removed from pantry',
     });
   } catch (error) {
     console.error('Error removing pantry item:', error);
     res.status(500).json({
       success: false,
       message: 'Error removing pantry item',
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -920,7 +1145,7 @@ router.post('/follow/:userId', auth, async (req, res) => {
     if (req.params.userId === req.user.id) {
       return res.status(400).json({
         success: false,
-        message: 'Cannot follow yourself'
+        message: 'Cannot follow yourself',
       });
     }
 
@@ -930,7 +1155,7 @@ router.post('/follow/:userId', auth, async (req, res) => {
     if (!userToFollow) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'User not found',
       });
     }
 
@@ -938,7 +1163,7 @@ router.post('/follow/:userId', auth, async (req, res) => {
     if (currentUser.following.includes(req.params.userId)) {
       return res.status(400).json({
         success: false,
-        message: 'Already following this user'
+        message: 'Already following this user',
       });
     }
 
@@ -950,14 +1175,14 @@ router.post('/follow/:userId', auth, async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Successfully followed user'
+      message: 'Successfully followed user',
     });
   } catch (error) {
     console.error('Error following user:', error);
     res.status(500).json({
       success: false,
       message: 'Error following user',
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -971,7 +1196,7 @@ router.delete('/follow/:userId', auth, async (req, res) => {
     if (!userToUnfollow) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'User not found',
       });
     }
 
@@ -983,14 +1208,14 @@ router.delete('/follow/:userId', auth, async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Successfully unfollowed user'
+      message: 'Successfully unfollowed user',
     });
   } catch (error) {
     console.error('Error unfollowing user:', error);
     res.status(500).json({
       success: false,
       message: 'Error unfollowing user',
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -999,22 +1224,19 @@ router.delete('/follow/:userId', auth, async (req, res) => {
 router.get('/search', async (req, res) => {
   try {
     const { q, page = 1, limit = 10 } = req.query;
-    
+
     if (!q) {
       return res.status(400).json({
         success: false,
-        message: 'Search query is required'
+        message: 'Search query is required',
       });
     }
 
     const skip = (page - 1) * limit;
-    
+
     const users = await User.find({
-      $or: [
-        { username: { $regex: q, $options: 'i' } },
-        { bio: { $regex: q, $options: 'i' } }
-      ],
-      isActive: true
+      $or: [{ username: { $regex: q, $options: 'i' } }, { bio: { $regex: q, $options: 'i' } }],
+      isActive: true,
     })
       .select('username profileImage bio followerCount recipeCount')
       .skip(skip)
@@ -1023,14 +1245,14 @@ router.get('/search', async (req, res) => {
 
     res.json({
       success: true,
-      data: users
+      data: users,
     });
   } catch (error) {
     console.error('Error searching users:', error);
     res.status(500).json({
       success: false,
       message: 'Error searching users',
-      error: error.message
+      error: error.message,
     });
   }
 });

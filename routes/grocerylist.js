@@ -11,54 +11,57 @@ router.post('/generate', auth, async (req, res) => {
     const { recipeIds, servingsMultiplier = {} } = req.body;
 
     if (!recipeIds || !Array.isArray(recipeIds) || recipeIds.length === 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: 'Recipe IDs array is required and cannot be empty',
-        error: 'MISSING_RECIPE_IDS'
+        error: 'MISSING_RECIPE_IDS',
       });
     }
 
     // Fetch recipes owned by the user
     const recipes = await Recipe.find({
       _id: { $in: recipeIds },
-      userId: req.user._id
+      userId: req.user._id,
     });
 
     if (recipes.length === 0) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         message: 'No recipes found for the provided IDs',
-        error: 'RECIPES_NOT_FOUND'
+        error: 'RECIPES_NOT_FOUND',
       });
     }
 
     if (recipes.length !== recipeIds.length) {
-      const foundIds = recipes.map(r => r._id.toString());
-      const missingIds = recipeIds.filter(id => !foundIds.includes(id));
+      const foundIds = recipes.map((r) => r._id.toString());
+      const missingIds = recipeIds.filter((id) => !foundIds.includes(id));
       console.warn('Some recipes not found:', missingIds);
     }
 
     // Aggregate ingredients from all recipes
     const ingredientMap = new Map();
 
-    recipes.forEach(recipe => {
+    recipes.forEach((recipe) => {
       const multiplier = servingsMultiplier[recipe._id.toString()] || 1;
-      
-      recipe.ingredients.forEach(ingredient => {
+
+      recipe.ingredients.forEach((ingredient) => {
         const key = ingredient.name.toLowerCase().trim();
-        
+
         if (ingredientMap.has(key)) {
           const existing = ingredientMap.get(key);
-          
+
           // Try to combine quantities if units match
-          if (existing.unit === ingredient.unit && 
-              !isNaN(parseFloat(existing.amount)) && 
-              !isNaN(parseFloat(ingredient.amount))) {
-            const combinedAmount = parseFloat(existing.amount) + (parseFloat(ingredient.amount) * multiplier);
+          if (
+            existing.unit === ingredient.unit &&
+            !isNaN(parseFloat(existing.amount)) &&
+            !isNaN(parseFloat(ingredient.amount))
+          ) {
+            const combinedAmount =
+              parseFloat(existing.amount) + parseFloat(ingredient.amount) * multiplier;
             existing.amount = combinedAmount.toString();
             existing.recipes.push({
               recipeId: recipe._id,
               recipeName: recipe.name,
               originalAmount: ingredient.amount,
-              multiplier
+              multiplier,
             });
           } else {
             // Different units or non-numeric amounts, keep separate
@@ -68,7 +71,7 @@ router.post('/generate', auth, async (req, res) => {
               original: ingredient.original,
               recipeId: recipe._id,
               recipeName: recipe.name,
-              multiplier
+              multiplier,
             });
           }
         } else {
@@ -77,14 +80,16 @@ router.post('/generate', auth, async (req, res) => {
             amount: (parseFloat(ingredient.amount) * multiplier).toString() || ingredient.amount,
             unit: ingredient.unit,
             original: ingredient.original,
-            recipes: [{
-              recipeId: recipe._id,
-              recipeName: recipe.name,
-              originalAmount: ingredient.amount,
-              multiplier
-            }],
+            recipes: [
+              {
+                recipeId: recipe._id,
+                recipeName: recipe.name,
+                originalAmount: ingredient.amount,
+                multiplier,
+              },
+            ],
             alternativeAmounts: [],
-            category: categorizeIngredient(ingredient.name)
+            category: categorizeIngredient(ingredient.name),
           });
         }
       });
@@ -110,29 +115,45 @@ router.post('/generate', auth, async (req, res) => {
     // Generate shopping tips
     const shoppingTips = generateShoppingTips(groceryList);
 
+    // PERSIST TO USER: Append unique items to user's grocery list
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (!user.groceryList) user.groceryList = [];
+
+    const newItems = groceryList.map(item => ({
+      _id: `gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      name: item.name,
+      amount: item.amount,
+      unit: item.unit || '',
+      category: item.category,
+      checked: false,
+      addedAt: new Date()
+    }));
+
+    user.groceryList.push(...newItems);
+    await user.save();
+
     res.json({
-      message: 'Grocery list generated successfully',
-      groceryList,
+      message: 'Grocery list generated and saved successfully',
+      groceryList: user.groceryList, // Return full updated list
+      generatedItems: newItems,
       categorizedList,
       shoppingTips,
       summary: {
         totalItems: groceryList.length,
         recipesUsed: recipes.length,
         categories: Object.keys(categorizedList),
-        estimatedShoppingTime: Math.ceil(groceryList.length / 10) * 5 // 5 min per 10 items
-      },
-      recipes: recipes.map(recipe => ({
-        id: recipe._id,
-        name: recipe.name,
-        servings: recipe.servings,
-        multiplier: servingsMultiplier[recipe._id.toString()] || 1
-      }))
+        estimatedShoppingTime: Math.ceil(groceryList.length / 10) * 5,
+      }
     });
   } catch (error) {
     console.error('Generate grocery list error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Server error while generating grocery list',
-      error: 'INTERNAL_SERVER_ERROR'
+      error: 'INTERNAL_SERVER_ERROR',
     });
   }
 });
@@ -140,47 +161,62 @@ router.post('/generate', auth, async (req, res) => {
 // Helper function to categorize ingredients
 function categorizeIngredient(ingredientName) {
   const name = ingredientName.toLowerCase();
-  
+
   const categories = {
-    'Produce': ['tomato', 'onion', 'garlic', 'carrot', 'celery', 'pepper', 'lettuce', 'spinach', 'potato', 'apple', 'banana', 'lemon', 'lime', 'orange', 'cucumber', 'mushroom', 'broccoli', 'cauliflower', 'zucchini', 'herbs', 'cilantro', 'parsley', 'basil', 'thyme', 'rosemary'],
-    'Meat & Seafood': ['chicken', 'beef', 'pork', 'turkey', 'fish', 'salmon', 'tuna', 'shrimp', 'crab', 'lobster', 'bacon', 'ham', 'sausage', 'ground'],
-    'Dairy & Eggs': ['milk', 'cheese', 'butter', 'yogurt', 'cream', 'egg', 'sour cream', 'cottage cheese', 'mozzarella', 'cheddar', 'parmesan'],
-    'Pantry & Dry Goods': ['flour', 'sugar', 'salt', 'pepper', 'oil', 'vinegar', 'rice', 'pasta', 'bread', 'oats', 'quinoa', 'beans', 'lentils', 'nuts', 'seeds'],
-    'Spices & Seasonings': ['cumin', 'paprika', 'oregano', 'bay leaves', 'cinnamon', 'nutmeg', 'ginger', 'turmeric', 'curry', 'chili', 'cayenne'],
-    'Condiments & Sauces': ['ketchup', 'mustard', 'mayo', 'soy sauce', 'hot sauce', 'bbq sauce', 'worcestershire', 'honey', 'maple syrup'],
-    'Frozen': ['frozen', 'ice cream'],
-    'Beverages': ['water', 'juice', 'soda', 'beer', 'wine', 'coffee', 'tea'],
-    'Baking': ['baking powder', 'baking soda', 'vanilla', 'extract', 'cocoa', 'chocolate'],
-    'Canned Goods': ['canned', 'can', 'tomato sauce', 'tomato paste', 'broth', 'stock']
+    vegetables: [
+      'tomato', 'onion', 'garlic', 'carrot', 'celery', 'pepper', 'lettuce', 'spinach', 
+      'potato', 'cucumber', 'mushroom', 'broccoli', 'cauliflower', 'zucchini', 'herbs',
+      'cilantro', 'parsley', 'basil', 'thyme', 'rosemary'
+    ],
+    fruits: [
+      'apple', 'banana', 'lemon', 'lime', 'orange', 'strawberry', 'berry', 'mango'
+    ],
+    meat: [
+      'chicken', 'beef', 'pork', 'turkey', 'fish', 'salmon', 'tuna', 'shrimp', 'crab', 
+      'lobster', 'bacon', 'ham', 'sausage', 'ground', 'steak', 'lamb'
+    ],
+    dairy: [
+      'milk', 'cheese', 'butter', 'yogurt', 'cream', 'egg', 'sour cream', 
+      'cottage cheese', 'mozzarella', 'cheddar', 'parmesan'
+    ],
+    grains: [
+      'flour', 'rice', 'pasta', 'bread', 'oats', 'quinoa', 'couscous'
+    ],
+    spices: [
+      'salt', 'pepper', 'cumin', 'paprika', 'oregano', 'cinnamon', 'ginger', 'turmeric'
+    ],
+    frozen: ['frozen', 'ice cream', 'peas', 'corn'],
+    beverages: ['water', 'juice', 'soda', 'beer', 'wine', 'coffee', 'tea'],
+    canned: ['canned', 'can', 'tomato sauce', 'tomato paste', 'broth', 'stock']
   };
 
   for (const [category, keywords] of Object.entries(categories)) {
-    if (keywords.some(keyword => name.includes(keyword))) {
+    if (keywords.some((keyword) => name.includes(keyword))) {
       return category;
     }
   }
 
-  return 'Other';
+  return 'other';
 }
 
 // Helper function to generate shopping tips
 function generateShoppingTips(groceryList) {
   const tips = [];
-  
+
   // Check for perishables
-  const produceItems = groceryList.filter(item => item.category === 'Produce').length;
+  const produceItems = groceryList.filter((item) => item.category === 'Produce').length;
   if (produceItems > 5) {
     tips.push('You have many fresh produce items. Shop for these last to keep them fresh.');
   }
 
   // Check for meat/seafood
-  const proteinItems = groceryList.filter(item => item.category === 'Meat & Seafood').length;
+  const proteinItems = groceryList.filter((item) => item.category === 'Meat & Seafood').length;
   if (proteinItems > 0) {
-    tips.push('Don\'t forget to bring a cooler bag for meat and seafood items.');
+    tips.push("Don't forget to bring a cooler bag for meat and seafood items.");
   }
 
   // Check for dairy
-  const dairyItems = groceryList.filter(item => item.category === 'Dairy & Eggs').length;
+  const dairyItems = groceryList.filter((item) => item.category === 'Dairy & Eggs').length;
   if (dairyItems > 3) {
     tips.push('Check expiration dates on dairy products before purchasing.');
   }
@@ -199,13 +235,13 @@ router.get('/history', auth, async (req, res) => {
     // In a full implementation, you might want to store grocery lists in a separate collection
     res.json({
       message: 'Grocery list history feature coming soon',
-      history: []
+      history: [],
     });
   } catch (error) {
     console.error('Get grocery list history error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Server error while fetching grocery list history',
-      error: 'INTERNAL_SERVER_ERROR'
+      error: 'INTERNAL_SERVER_ERROR',
     });
   }
 });
@@ -214,12 +250,12 @@ router.get('/history', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select('groceryList');
-    
+
     if (!user) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
         message: 'User not found',
-        error: 'USER_NOT_FOUND'
+        error: 'USER_NOT_FOUND',
       });
     }
 
@@ -228,14 +264,14 @@ router.get('/', auth, async (req, res) => {
     res.json({
       success: true,
       groceryList: list,
-      itemCount: list.length
+      itemCount: list.length,
     });
   } catch (error) {
     console.error('Get grocery list error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       message: 'Server error while fetching grocery list',
-      error: 'INTERNAL_SERVER_ERROR'
+      error: 'INTERNAL_SERVER_ERROR',
     });
   }
 });
@@ -246,20 +282,20 @@ router.post('/item', auth, async (req, res) => {
     const { name, amount, unit, category, checked = false } = req.body;
 
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
         message: 'Item name is required',
-        error: 'MISSING_ITEM_NAME'
+        error: 'MISSING_ITEM_NAME',
       });
     }
 
     const user = await User.findById(req.user._id);
-    
+
     if (!user) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
         message: 'User not found',
-        error: 'USER_NOT_FOUND'
+        error: 'USER_NOT_FOUND',
       });
     }
 
@@ -276,7 +312,7 @@ router.post('/item', auth, async (req, res) => {
       unit: unit || '',
       category: category || categorizeIngredient(name),
       checked: checked,
-      addedAt: new Date()
+      addedAt: new Date(),
     };
 
     user.groceryList.push(newItem);
@@ -287,14 +323,14 @@ router.post('/item', auth, async (req, res) => {
       message: 'Item added to grocery list',
       item: newItem,
       groceryList: user.groceryList,
-      itemCount: user.groceryList.length
+      itemCount: user.groceryList.length,
     });
   } catch (error) {
     console.error('Add grocery list item error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       message: 'Server error while adding item to grocery list',
-      error: 'INTERNAL_SERVER_ERROR'
+      error: 'INTERNAL_SERVER_ERROR',
     });
   }
 });
@@ -306,30 +342,30 @@ router.put('/item/:itemId', auth, async (req, res) => {
     const { name, amount, unit, category, checked } = req.body;
 
     const user = await User.findById(req.user._id);
-    
+
     if (!user) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
         message: 'User not found',
-        error: 'USER_NOT_FOUND'
+        error: 'USER_NOT_FOUND',
       });
     }
 
     if (!user.groceryList) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
         message: 'Grocery list is empty',
-        error: 'EMPTY_GROCERY_LIST'
+        error: 'EMPTY_GROCERY_LIST',
       });
     }
 
-    const itemIndex = user.groceryList.findIndex(item => item._id === itemId);
-    
+    const itemIndex = user.groceryList.findIndex((item) => item._id === itemId);
+
     if (itemIndex === -1) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
         message: 'Item not found in grocery list',
-        error: 'ITEM_NOT_FOUND'
+        error: 'ITEM_NOT_FOUND',
       });
     }
 
@@ -346,14 +382,14 @@ router.put('/item/:itemId', auth, async (req, res) => {
       success: true,
       message: 'Item updated successfully',
       item: user.groceryList[itemIndex],
-      groceryList: user.groceryList
+      groceryList: user.groceryList,
     });
   } catch (error) {
     console.error('Update grocery list item error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       message: 'Server error while updating item',
-      error: 'INTERNAL_SERVER_ERROR'
+      error: 'INTERNAL_SERVER_ERROR',
     });
   }
 });
@@ -364,30 +400,30 @@ router.delete('/item/:itemId', auth, async (req, res) => {
     const { itemId } = req.params;
 
     const user = await User.findById(req.user._id);
-    
+
     if (!user) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
         message: 'User not found',
-        error: 'USER_NOT_FOUND'
+        error: 'USER_NOT_FOUND',
       });
     }
 
     if (!user.groceryList) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
         message: 'Grocery list is empty',
-        error: 'EMPTY_GROCERY_LIST'
+        error: 'EMPTY_GROCERY_LIST',
       });
     }
 
-    const itemIndex = user.groceryList.findIndex(item => item._id === itemId);
-    
+    const itemIndex = user.groceryList.findIndex((item) => item._id === itemId);
+
     if (itemIndex === -1) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
         message: 'Item not found in grocery list',
-        error: 'ITEM_NOT_FOUND'
+        error: 'ITEM_NOT_FOUND',
       });
     }
 
@@ -397,14 +433,14 @@ router.delete('/item/:itemId', auth, async (req, res) => {
     res.json({
       success: true,
       message: 'Item deleted successfully',
-      groceryList: user.groceryList
+      groceryList: user.groceryList,
     });
   } catch (error) {
     console.error('Delete grocery list item error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       message: 'Server error while deleting item',
-      error: 'INTERNAL_SERVER_ERROR'
+      error: 'INTERNAL_SERVER_ERROR',
     });
   }
 });
@@ -413,12 +449,12 @@ router.delete('/item/:itemId', auth, async (req, res) => {
 router.delete('/checked', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
-    
+
     if (!user) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
         message: 'User not found',
-        error: 'USER_NOT_FOUND'
+        error: 'USER_NOT_FOUND',
       });
     }
 
@@ -426,12 +462,12 @@ router.delete('/checked', auth, async (req, res) => {
       return res.json({
         success: true,
         message: 'Grocery list is already empty',
-        groceryList: []
+        groceryList: [],
       });
     }
 
     const initialCount = user.groceryList.length;
-    user.groceryList = user.groceryList.filter(item => !item.checked);
+    user.groceryList = user.groceryList.filter((item) => !item.checked);
     await user.save();
 
     const deletedCount = initialCount - user.groceryList.length;
@@ -440,14 +476,14 @@ router.delete('/checked', auth, async (req, res) => {
       success: true,
       message: `${deletedCount} checked item(s) removed`,
       groceryList: user.groceryList,
-      deletedCount
+      deletedCount,
     });
   } catch (error) {
     console.error('Clear checked items error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       message: 'Server error while clearing checked items',
-      error: 'INTERNAL_SERVER_ERROR'
+      error: 'INTERNAL_SERVER_ERROR',
     });
   }
 });
@@ -456,12 +492,12 @@ router.delete('/checked', auth, async (req, res) => {
 router.delete('/clear', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
-    
+
     if (!user) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
         message: 'User not found',
-        error: 'USER_NOT_FOUND'
+        error: 'USER_NOT_FOUND',
       });
     }
 
@@ -473,14 +509,14 @@ router.delete('/clear', auth, async (req, res) => {
       success: true,
       message: 'Grocery list cleared',
       deletedCount: itemCount,
-      groceryList: []
+      groceryList: [],
     });
   } catch (error) {
     console.error('Clear grocery list error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       message: 'Server error while clearing grocery list',
-      error: 'INTERNAL_SERVER_ERROR'
+      error: 'INTERNAL_SERVER_ERROR',
     });
   }
 });
@@ -492,13 +528,13 @@ router.get('/history', auth, async (req, res) => {
     // In a full implementation, you might want to store grocery lists in a separate collection
     res.json({
       message: 'Grocery list history feature coming soon',
-      history: []
+      history: [],
     });
   } catch (error) {
     console.error('Get grocery list history error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Server error while fetching grocery list history',
-      error: 'INTERNAL_SERVER_ERROR'
+      error: 'INTERNAL_SERVER_ERROR',
     });
   }
 });
@@ -509,9 +545,9 @@ router.post('/save', auth, async (req, res) => {
     const { groceryList, name } = req.body;
 
     if (!groceryList || !Array.isArray(groceryList)) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: 'Grocery list array is required',
-        error: 'MISSING_GROCERY_LIST'
+        error: 'MISSING_GROCERY_LIST',
       });
     }
 
@@ -520,13 +556,13 @@ router.post('/save', auth, async (req, res) => {
     res.json({
       message: 'Grocery list saving feature coming soon',
       listName: name || 'Untitled List',
-      itemCount: groceryList.length
+      itemCount: groceryList.length,
     });
   } catch (error) {
     console.error('Save grocery list error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Server error while saving grocery list',
-      error: 'INTERNAL_SERVER_ERROR'
+      error: 'INTERNAL_SERVER_ERROR',
     });
   }
 });

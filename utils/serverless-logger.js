@@ -7,14 +7,14 @@ const colors = {
   green: '\x1b[32m',
   yellow: '\x1b[33m',
   blue: '\x1b[34m',
-  magenta: '\x1b[35m'
+  magenta: '\x1b[35m',
 };
 
 // Simple device detection
 const detectDevice = (userAgent) => {
   if (!userAgent) return 'Unknown';
   const ua = userAgent.toLowerCase();
-  
+
   if (ua.includes('mobile') || ua.includes('android') || ua.includes('iphone')) {
     return 'Mobile';
   }
@@ -25,7 +25,7 @@ const detectDevice = (userAgent) => {
 const detectBrowser = (userAgent) => {
   if (!userAgent) return 'Unknown Browser';
   const ua = userAgent.toLowerCase();
-  
+
   if (ua.includes('chrome')) return 'Chrome';
   if (ua.includes('firefox')) return 'Firefox';
   if (ua.includes('safari')) return 'Safari';
@@ -42,16 +42,17 @@ class ServerlessLogger {
   formatMessage(level, message, metadata = {}) {
     const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
     const colorMap = {
-      'ERROR': colors.red,
-      'WARN': colors.yellow,
-      'INFO': colors.green,
-      'DEBUG': colors.blue,
-      'TRACE': colors.magenta
+      ERROR: colors.red,
+      WARN: colors.yellow,
+      INFO: colors.green,
+      DEBUG: colors.blue,
+      TRACE: colors.magenta,
     };
-    
+
     const color = colorMap[level] || colors.reset;
-    const metadataStr = Object.keys(metadata).length > 0 ? `\nMetadata: ${JSON.stringify(metadata, null, 2)}` : '';
-    
+    const metadataStr =
+      Object.keys(metadata).length > 0 ? `\nMetadata: ${JSON.stringify(metadata, null, 2)}` : '';
+
     if (this.isServerless) {
       // Simple format for serverless (no colors in production logs)
       return `[${timestamp}] ${level}: ${message}${metadataStr}`;
@@ -62,7 +63,7 @@ class ServerlessLogger {
   }
 
   shouldLog(level) {
-    const levels = { 'ERROR': 0, 'WARN': 1, 'INFO': 2, 'DEBUG': 3, 'TRACE': 4 };
+    const levels = { ERROR: 0, WARN: 1, INFO: 2, DEBUG: 3, TRACE: 4 };
     return levels[level] <= levels[this.logLevel];
   }
 
@@ -111,7 +112,7 @@ class ServerlessLogger {
     this.error(`Application Error: ${error.message}`, {
       ...context,
       stack: error.stack,
-      name: error.name
+      name: error.name,
     });
   }
 }
@@ -122,5 +123,5 @@ const logger = new ServerlessLogger();
 module.exports = {
   logger,
   detectDevice,
-  detectBrowser
+  detectBrowser,
 };

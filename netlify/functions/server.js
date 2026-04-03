@@ -35,23 +35,27 @@ const corsOptions = {
       'https://meal-cart-phi.vercel.app',
       'http://localhost:5173',
       'http://localhost:5174',
-      'http://localhost:3000'
+      'http://localhost:3000',
     ];
-    
+
     console.log('[CORS] Request origin:', origin || 'no-origin');
-    
+
     // Allow requests with no origin (like mobile apps, curl, Postman, etc)
     if (!origin) {
       console.log('[CORS] Allowing request with no origin (mobile/native app)');
       return callback(null, true);
     }
-    
+
     // Allow localhost with any port (for mobile device testing on local network)
-    if (origin.includes('localhost') || origin.includes('127.0.0.1') || origin.includes('192.168.')) {
+    if (
+      origin.includes('localhost') ||
+      origin.includes('127.0.0.1') ||
+      origin.includes('192.168.')
+    ) {
       console.log('[CORS] Allowing localhost/local network origin');
       return callback(null, true);
     }
-    
+
     // Check against allowed origins
     if (allowedOrigins.indexOf(origin) !== -1) {
       console.log('[CORS] Allowing whitelisted origin');
@@ -62,10 +66,18 @@ const corsOptions = {
     }
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-CSRF-Token', 'X-Api-Version'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'X-CSRF-Token',
+    'X-Api-Version',
+  ],
   credentials: true,
   preflightContinue: false,
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
 };
 
 // Middleware
@@ -100,7 +112,7 @@ async function connectToDatabase() {
       serverSelectionTimeoutMS: 5000,
       socketTimeoutMS: 45000,
     };
-    
+
     console.log('[DB] Connecting to MongoDB...');
     const connection = await mongoose.connect(MONGODB_URI, options);
     cachedConnection = connection;
@@ -114,13 +126,13 @@ async function connectToDatabase() {
 
 // Root route
 app.get('/', (req, res) => {
-  res.status(200).json({ 
+  res.status(200).json({
     message: 'MealCart Backend API is running',
     version: '1.0.0',
     platform: 'Netlify Functions',
     healthCheck: '/api/health',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'production'
+    environment: process.env.NODE_ENV || 'production',
   });
 });
 
@@ -128,25 +140,25 @@ app.get('/', (req, res) => {
 app.get('/api/health', async (req, res) => {
   try {
     await connectToDatabase();
-    res.json({ 
-      status: 'healthy', 
+    res.json({
+      status: 'healthy',
       timestamp: new Date().toISOString(),
       database: 'connected',
       platform: 'Netlify Functions',
       environment: process.env.NODE_ENV || 'production',
       geminiConfigured: !!process.env.GEMINI_API_KEY,
-      jwtConfigured: !!process.env.JWT_SECRET
+      jwtConfigured: !!process.env.JWT_SECRET,
     });
   } catch (error) {
     console.error('[Health] Database check failed:', error.message);
-    res.status(503).json({ 
-      status: 'unhealthy', 
+    res.status(503).json({
+      status: 'unhealthy',
       error: error.message,
       timestamp: new Date().toISOString(),
       platform: 'Netlify Functions',
       environment: process.env.NODE_ENV || 'production',
       geminiConfigured: !!process.env.GEMINI_API_KEY,
-      jwtConfigured: !!process.env.JWT_SECRET
+      jwtConfigured: !!process.env.JWT_SECRET,
     });
   }
 });
@@ -195,28 +207,28 @@ app.use((err, req, res, _next) => {
   console.error('[Error] Message:', err.message);
   console.error('[Error] Stack:', err.stack);
   console.error('[Error] Request:', req.method, req.originalUrl);
-  
+
   const statusCode = err.status || err.statusCode || 500;
-  
-  res.status(statusCode).json({ 
+
+  res.status(statusCode).json({
     success: false,
     message: err.message || 'Something went wrong!',
     error: {
       message: err.message || 'Internal server error',
       code: err.code || 'INTERNAL_ERROR',
-      ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+      ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
     },
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
 // 404 handler
 app.use('*', (req, res) => {
   console.log(`[404] ${req.method} ${req.originalUrl}`);
-  res.status(404).json({ 
+  res.status(404).json({
     message: 'Route not found',
     path: req.originalUrl,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -226,7 +238,7 @@ const handler = serverless(app);
 module.exports.handler = async (event, context) => {
   // Important: Set this to allow connection pooling
   context.callbackWaitsForEmptyEventLoop = false;
-  
+
   try {
     const result = await handler(event, context);
     return result;
@@ -234,10 +246,10 @@ module.exports.handler = async (event, context) => {
     console.error('[Netlify Handler] Error:', error);
     return {
       statusCode: 500,
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         error: 'Internal server error',
-        message: error.message 
-      })
+        message: error.message,
+      }),
     };
   }
 };

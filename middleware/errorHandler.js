@@ -61,36 +61,24 @@ const handleMongooseError = (err) => {
   // Duplicate key error
   if (err.code === 11000) {
     const field = Object.keys(err.keyPattern)[0];
-    return new AppError(
-      `${field} already exists`,
-      400,
-      'DUPLICATE_FIELD'
-    );
+    return new AppError(`${field} already exists`, 400, 'DUPLICATE_FIELD');
   }
 
   // Validation error
   if (err.name === 'ValidationError') {
-    const errors = Object.values(err.errors).map(e => ({
+    const errors = Object.values(err.errors).map((e) => ({
       field: e.path,
       message: e.message,
       value: e.value,
     }));
-    const error = new AppError(
-      'Validation failed',
-      400,
-      'VALIDATION_ERROR'
-    );
+    const error = new AppError('Validation failed', 400, 'VALIDATION_ERROR');
     error.errors = errors;
     return error;
   }
 
   // Cast error (invalid ObjectId)
   if (err.name === 'CastError') {
-    return new AppError(
-      `Invalid ${err.path}: ${err.value}`,
-      400,
-      'INVALID_ID'
-    );
+    return new AppError(`Invalid ${err.path}: ${err.value}`, 400, 'INVALID_ID');
   }
 
   return err;
@@ -101,19 +89,11 @@ const handleMongooseError = (err) => {
  */
 const handleJWTError = (err) => {
   if (err.name === 'JsonWebTokenError') {
-    return new AppError(
-      'Invalid token. Please log in again.',
-      401,
-      'INVALID_TOKEN'
-    );
+    return new AppError('Invalid token. Please log in again.', 401, 'INVALID_TOKEN');
   }
 
   if (err.name === 'TokenExpiredError') {
-    return new AppError(
-      'Token expired. Please log in again.',
-      401,
-      'TOKEN_EXPIRED'
-    );
+    return new AppError('Token expired. Please log in again.', 401, 'TOKEN_EXPIRED');
   }
 
   return err;
@@ -122,7 +102,7 @@ const handleJWTError = (err) => {
 /**
  * Global error handling middleware
  */
-const errorHandler = (err, req, res, next) => {
+const errorHandler = (err, req, res, _next) => {
   let error = { ...err };
   error.message = err.message;
   error.stack = err.stack;
@@ -150,11 +130,7 @@ const errorHandler = (err, req, res, next) => {
 
   // Handle multer errors (file upload)
   if (err.name === 'MulterError') {
-    error = new AppError(
-      `File upload error: ${err.message}`,
-      400,
-      'FILE_UPLOAD_ERROR'
-    );
+    error = new AppError(`File upload error: ${err.message}`, 400, 'FILE_UPLOAD_ERROR');
   }
 
   // Default to 500 if statusCode is not set
@@ -168,11 +144,7 @@ const errorHandler = (err, req, res, next) => {
  * Handle 404 - Route not found
  */
 const notFoundHandler = (req, res, next) => {
-  const error = new AppError(
-    `Route ${req.originalUrl} not found`,
-    404,
-    'ROUTE_NOT_FOUND'
-  );
+  const error = new AppError(`Route ${req.originalUrl} not found`, 404, 'ROUTE_NOT_FOUND');
   next(error);
 };
 

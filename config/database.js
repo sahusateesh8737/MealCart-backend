@@ -33,19 +33,18 @@ class Database {
 
     try {
       await mongoose.connect(config.database.uri, options);
-      
+
       this.isConnected = true;
       this.retryCount = 0;
-      
+
       console.log('✅ MongoDB: Connected successfully');
-      
+
       if (config.database.debug) {
         mongoose.set('debug', true);
       }
 
       // Setup connection event handlers
       this.setupEventHandlers();
-      
     } catch (error) {
       console.error('❌ MongoDB: Connection failed', {
         error: error.message,
@@ -56,9 +55,11 @@ class Database {
       this.retryCount++;
 
       if (this.retryCount < this.maxRetries) {
-        console.log(`🔄 MongoDB: Retrying connection in ${this.retryDelay / 1000}s... (Attempt ${this.retryCount + 1}/${this.maxRetries})`);
-        
-        await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+        console.log(
+          `🔄 MongoDB: Retrying connection in ${this.retryDelay / 1000}s... (Attempt ${this.retryCount + 1}/${this.maxRetries})`
+        );
+
+        await new Promise((resolve) => setTimeout(resolve, this.retryDelay));
         return this.connect();
       } else {
         console.error('❌ MongoDB: Max retries reached. Exiting...');
@@ -86,7 +87,7 @@ class Database {
     mongoose.connection.on('disconnected', () => {
       console.log('📦 MongoDB: Disconnected');
       this.isConnected = false;
-      
+
       // Auto-reconnect in production
       if (config.isProduction || config.isServerless) {
         console.log('🔄 MongoDB: Attempting to reconnect...');

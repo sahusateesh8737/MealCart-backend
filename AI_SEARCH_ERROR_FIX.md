@@ -49,17 +49,18 @@ router.post('/search-recipes', async (req, res) => {
       return res.status(503).json({
         success: false,
         message: 'AI service not available',
-        error: 'GEMINI_NOT_INITIALIZED'
+        error: 'GEMINI_NOT_INITIALIZED',
       });
     }
-    
+
     // ... rest of the code
   } catch (error) {
     console.error('Error searching recipes with AI:', error);
-    res.status(500).json({  // ← THIS IS WHAT'S RETURNING
+    res.status(500).json({
+      // ← THIS IS WHAT'S RETURNING
       success: false,
       message: 'Error searching recipes with AI',
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -91,13 +92,13 @@ router.post('/search-recipes', async (req, res) => {
 
 While you're there, add these too (otherwise other features will fail):
 
-| Variable | Value | Where to Get It |
-|----------|-------|-----------------|
-| `GEMINI_API_KEY` | `AIza...` | Google AI Studio |
-| `JWT_SECRET` | (from .env) | Copy from your local `.env` file |
-| `MONGODB_URI` | `mongodb+srv://...` | Copy from your local `.env` file |
-| `NODE_ENV` | `production` | Just type it |
-| `FRONTEND_URL` | `https://meal-cart-theta.vercel.app` | Your Vercel URL |
+| Variable         | Value                                | Where to Get It                  |
+| ---------------- | ------------------------------------ | -------------------------------- |
+| `GEMINI_API_KEY` | `AIza...`                            | Google AI Studio                 |
+| `JWT_SECRET`     | (from .env)                          | Copy from your local `.env` file |
+| `MONGODB_URI`    | `mongodb+srv://...`                  | Copy from your local `.env` file |
+| `NODE_ENV`       | `production`                         | Just type it                     |
+| `FRONTEND_URL`   | `https://meal-cart-theta.vercel.app` | Your Vercel URL                  |
 
 ### Step 4: Redeploy
 
@@ -116,6 +117,7 @@ curl https://mealcartbackend.netlify.app/api/health | jq '.'
 ```
 
 **Expected Response:**
+
 ```json
 {
   "status": "healthy",
@@ -137,6 +139,7 @@ curl -X POST https://mealcartbackend.netlify.app/api/ai/search-recipes \
 ```
 
 **Expected Response:**
+
 ```json
 {
   "success": true,
@@ -161,11 +164,13 @@ curl -X POST https://mealcartbackend.netlify.app/api/ai/search-recipes \
 ### Local vs Production Environments
 
 **Local (Works):**
+
 - Reads from `.env` file ✅
 - Has `GEMINI_API_KEY` ✅
 - AI features work ✅
 
 **Netlify (Fails):**
+
 - Doesn't have `.env` file ❌
 - Needs environment variables set in dashboard ❌
 - AI features fail with 500 ❌
@@ -180,13 +185,13 @@ Your `.env` file is in `.gitignore`, so it never gets pushed to GitHub or Netlif
 
 All of these will fail without `GEMINI_API_KEY`:
 
-| Endpoint | Error | Fix |
-|----------|-------|-----|
-| `POST /api/ai/search-recipes` | 500 | Set GEMINI_API_KEY |
-| `POST /api/ai/chat` | 500 | Set GEMINI_API_KEY |
-| `POST /api/gemini/chat` | 500 | Set GEMINI_API_KEY |
-| `POST /api/gemini/generate` | 500 | Set GEMINI_API_KEY |
-| `POST /api/gemini/ask` | 500 | Set GEMINI_API_KEY |
+| Endpoint                      | Error | Fix                |
+| ----------------------------- | ----- | ------------------ |
+| `POST /api/ai/search-recipes` | 500   | Set GEMINI_API_KEY |
+| `POST /api/ai/chat`           | 500   | Set GEMINI_API_KEY |
+| `POST /api/gemini/chat`       | 500   | Set GEMINI_API_KEY |
+| `POST /api/gemini/generate`   | 500   | Set GEMINI_API_KEY |
+| `POST /api/gemini/ask`        | 500   | Set GEMINI_API_KEY |
 
 ---
 
@@ -194,13 +199,15 @@ All of these will fail without `GEMINI_API_KEY`:
 
 **Problem**: Missing `GEMINI_API_KEY` on Netlify
 
-**Solution**: 
+**Solution**:
+
 1. Get API key from Google AI Studio
 2. Add to Netlify environment variables
 3. Redeploy
 4. Test
 
-**Status**: 
+**Status**:
+
 - ✅ Local: Working
 - ❌ Production: Needs env vars
 - ⏳ Fix Time: 5 minutes

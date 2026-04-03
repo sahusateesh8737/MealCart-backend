@@ -15,7 +15,6 @@ const authRoutes = require('./routes/auth');
 const recipeRoutes = require('./routes/recipes');
 const enhancedRecipeRoutes = require('./routes/recipes_enhanced');
 const groceryListRoutes = require('./routes/grocerylist');
-const geminiRoutes = require('./routes/gemini');
 const aiRoutes = require('./routes/ai');
 const userRoutes = require('./routes/users');
 
@@ -75,7 +74,6 @@ function createApp() {
   apiRouter.use('/recipes', recipeRoutes);
   apiRouter.use('/recipes-enhanced', enhancedRecipeRoutes);
   apiRouter.use('/grocerylist', groceryListRoutes);
-  apiRouter.use('/gemini', geminiRoutes);
   apiRouter.use('/ai', aiRoutes);
   apiRouter.use('/users', userRoutes);
 

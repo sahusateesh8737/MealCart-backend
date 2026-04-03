@@ -4,124 +4,143 @@ const recipeSchema = new mongoose.Schema({
   externalId: {
     type: String,
     required: true,
-    index: true
+    index: true,
   },
   name: {
     type: String,
     required: [true, 'Recipe name is required'],
     trim: true,
-    maxlength: [200, 'Recipe name cannot exceed 200 characters']
+    maxlength: [200, 'Recipe name cannot exceed 200 characters'],
   },
-  image: {
-    type: String,
-    default: ''
-  },
+
   description: {
     type: String,
-    maxlength: [1000, 'Description cannot exceed 1000 characters']
+    maxlength: [1000, 'Description cannot exceed 1000 characters'],
   },
-  ingredients: [{
-    name: {
-      type: String,
-      required: true
+  ingredients: [
+    {
+      name: {
+        type: String,
+        required: true,
+      },
+      amount: {
+        type: String,
+      },
+      unit: {
+        type: String,
+      },
+      original: {
+        type: String,
+        required: true,
+      },
     },
-    amount: {
-      type: String
-    },
-    unit: {
-      type: String
-    },
-    original: {
-      type: String,
-      required: true
-    }
-  }],
+  ],
   instructions: {
     type: String,
-    required: [true, 'Instructions are required']
+    required: [true, 'Instructions are required'],
   },
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true,
-    index: true
+    index: true,
   },
   createdAt: {
     type: Date,
-    default: Date.now
+    default: Date.now,
   },
   // Additional recipe metadata
   cookingTime: {
     type: Number, // in minutes
-    min: 0
+    min: 0,
   },
   preparationTime: {
     type: Number, // in minutes
-    min: 0
+    min: 0,
   },
   servings: {
     type: Number,
     min: 1,
-    default: 1
+    default: 1,
   },
   difficulty: {
     type: String,
     enum: ['easy', 'medium', 'hard'],
-    default: 'medium'
+    default: 'medium',
   },
-  dietaryTags: [{
-    type: String,
-    enum: ['vegetarian', 'vegan', 'gluten-free', 'dairy-free', 'nut-free', 'low-carb', 'keto', 'paleo']
-  }],
+  dietaryTags: [
+    {
+      type: String,
+      enum: [
+        'vegetarian',
+        'vegan',
+        'gluten-free',
+        'dairy-free',
+        'nut-free',
+        'low-carb',
+        'keto',
+        'paleo',
+      ],
+    },
+  ],
+  mealType: [
+    {
+      type: String,
+      enum: ['breakfast', 'lunch', 'dinner', 'snack', 'dessert'],
+      default: [],
+    },
+  ],
   nutrition: {
     calories: Number,
     protein: Number,
     carbs: Number,
     fat: Number,
-    fiber: Number
+    fiber: Number,
   },
   // User interactions
   rating: {
     type: Number,
     min: 1,
-    max: 5
+    max: 5,
   },
   notes: {
     type: String,
-    maxlength: [500, 'Notes cannot exceed 500 characters']
+    maxlength: [500, 'Notes cannot exceed 500 characters'],
   },
   isFavorite: {
     type: Boolean,
-    default: false
+    default: false,
   },
   timesCooked: {
     type: Number,
     default: 0,
-    min: 0
+    min: 0,
   },
   lastCooked: {
-    type: Date
+    type: Date,
   },
   isPublic: {
     type: Boolean,
-    default: true
+    default: true,
   },
   // Recipe source and metadata
   source: {
     type: String,
     enum: ['ai_search', 'ai_generation', 'external_api', 'user_created'],
-    default: 'user_created'
+    default: 'user_created',
   },
-  groceryList: [{
-    type: String
-  }],
+  groceryList: [
+    {
+      type: String,
+    },
+  ],
   searchQuery: {
-    type: String // Original search query for AI-generated recipes
+    type: String, // Original search query for AI-generated recipes
   },
   isAIGenerated: {
     type: Boolean,
-    default: false
-  }
+    default: false,
+  },
 });
 
 // Compound index for user-specific queries
@@ -143,10 +162,10 @@ recipeSchema.methods.markAsCooked = function () {
 
 // Static method to find recipes by ingredients
 recipeSchema.statics.findByIngredients = function (userId, ingredients) {
-  const ingredientRegex = ingredients.map(ing => new RegExp(ing, 'i'));
+  const ingredientRegex = ingredients.map((ing) => new RegExp(ing, 'i'));
   return this.find({
     userId,
-    'ingredients.name': { $in: ingredientRegex }
+    'ingredients.name': { $in: ingredientRegex },
   });
 };
 

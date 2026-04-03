@@ -14,7 +14,7 @@ const { AppError } = require('./errorHandler');
 const authRequired = async (req, res, next) => {
   try {
     const authHeader = req.header('Authorization');
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       throw new AppError('No token provided. Access denied.', 401, 'UNAUTHORIZED');
     }
@@ -27,7 +27,7 @@ const authRequired = async (req, res, next) => {
 
     const decoded = jwt.verify(token, config.auth.jwtSecret);
     const user = await User.findById(decoded.userId).select('-password');
-    
+
     if (!user) {
       throw new AppError('User not found. Access denied.', 401, 'USER_NOT_FOUND');
     }
@@ -46,13 +46,13 @@ const authRequired = async (req, res, next) => {
 const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.header('Authorization');
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return next();
     }
 
     const token = authHeader.substring(7);
-    
+
     if (!token) {
       return next();
     }
@@ -60,7 +60,7 @@ const optionalAuth = async (req, res, next) => {
     try {
       const decoded = jwt.verify(token, config.auth.jwtSecret);
       const user = await User.findById(decoded.userId).select('-password');
-      
+
       if (user) {
         req.user = user;
         req.userId = user._id;
@@ -68,7 +68,7 @@ const optionalAuth = async (req, res, next) => {
     } catch (jwtError) {
       console.log('Optional auth - invalid/expired token (ignored)');
     }
-    
+
     next();
   } catch (error) {
     next();
@@ -85,7 +85,9 @@ const authorize = (...roles) => {
     }
 
     if (!roles.includes(req.user.role)) {
-      return next(new AppError('You do not have permission to perform this action', 403, 'FORBIDDEN'));
+      return next(
+        new AppError('You do not have permission to perform this action', 403, 'FORBIDDEN')
+      );
     }
 
     next();
@@ -110,7 +112,7 @@ const checkOwnership = (resourceIdParam = 'id') => {
   };
 };
 
-module.exports = { 
+module.exports = {
   auth: authRequired,
   authRequired,
   optional: optionalAuth,
