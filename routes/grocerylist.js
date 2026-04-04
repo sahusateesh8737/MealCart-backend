@@ -1,9 +1,20 @@
 const express = require('express');
+const { GoogleGenAI } = require('@google/genai');
 const Recipe = require('../models/Recipe');
 const User = require('../models/User');
 const { auth } = require('../middleware/auth');
 
 const router = express.Router();
+
+let aiClient = null;
+if (process.env.GEMINI_API_KEY) {
+  try {
+    aiClient = new GoogleGenAI({ key: process.env.GEMINI_API_KEY });
+  } catch (err) {
+    console.error('Failed to init Gemini in grocerylist:', err);
+  }
+}
+
 
 // Generate grocery list from selected recipe IDs
 router.post('/generate', auth, async (req, res) => {
@@ -37,71 +48,68 @@ router.post('/generate', auth, async (req, res) => {
     }
 
     // Aggregate ingredients from all recipes
-    const ingredientMap = new Map();
+    let groceryList = [];
+    
+    if (aiClient) {
+      // Create raw text list of all ingredients
+      const rawIngredientsText = recipes.map((recipe) => {
+        const multiplier = servingsMultiplier[recipe._id.toString()] || 1;
+        const ingredientsText = recipe.ingredients.map(i => `${i.amount} ${i.unit} ${i.name}`).join("\n");
+        return `Recipe: ${recipe.name} (Multiplier: ${multiplier})\n${ingredientsText}`;
+      }).join("\n\n");
 
-    recipes.forEach((recipe) => {
-      const multiplier = servingsMultiplier[recipe._id.toString()] || 1;
+      const prompt = `You are an expert culinary assistant managing a grocery list.
+      Here are the ingredients from selected recipes:
+      ${rawIngredientsText}
 
-      recipe.ingredients.forEach((ingredient) => {
-        const key = ingredient.name.toLowerCase().trim();
-
-        if (ingredientMap.has(key)) {
-          const existing = ingredientMap.get(key);
-
-          // Try to combine quantities if units match
-          if (
-            existing.unit === ingredient.unit &&
-            !isNaN(parseFloat(existing.amount)) &&
-            !isNaN(parseFloat(ingredient.amount))
-          ) {
-            const combinedAmount =
-              parseFloat(existing.amount) + parseFloat(ingredient.amount) * multiplier;
-            existing.amount = combinedAmount.toString();
-            existing.recipes.push({
-              recipeId: recipe._id,
-              recipeName: recipe.name,
-              originalAmount: ingredient.amount,
-              multiplier,
-            });
-          } else {
-            // Different units or non-numeric amounts, keep separate
-            existing.alternativeAmounts.push({
-              amount: (parseFloat(ingredient.amount) * multiplier).toString() || ingredient.amount,
-              unit: ingredient.unit,
-              original: ingredient.original,
-              recipeId: recipe._id,
-              recipeName: recipe.name,
-              multiplier,
-            });
-          }
-        } else {
-          ingredientMap.set(key, {
-            name: ingredient.name,
-            amount: (parseFloat(ingredient.amount) * multiplier).toString() || ingredient.amount,
-            unit: ingredient.unit,
-            original: ingredient.original,
-            recipes: [
-              {
-                recipeId: recipe._id,
-                recipeName: recipe.name,
-                originalAmount: ingredient.amount,
-                multiplier,
-              },
-            ],
-            alternativeAmounts: [],
-            category: categorizeIngredient(ingredient.name),
-          });
+      Combine identical or strongly similar ingredients together intelligently. Mathematically add their amounts if the units are compatible (e.g. merging cups, tbps, or pieces). 
+      Return ONLY a strict, minified JSON array of objects representing the final consolidated grocery list. Do NOT include markdown blocks (\`\`\`json). The objects MUST have these exact keys:
+      [
+        {
+          "name": "string (clean name of ingredient)",
+          "amount": "string or number (total amount)",
+          "unit": "string (e.g. cups, tbsp, grams, pieces - leave empty if not applicable)",
+          "category": "string (MUST be one of: Produce, Dairy, Pantry, Proteins, Other)"
         }
-      });
-    });
+      ]
+      No additional text, ONLY the JSON array.`;
 
-    // Convert map to array and sort by category
-    const groceryList = Array.from(ingredientMap.values()).sort((a, b) => {
-      if (a.category !== b.category) {
-        return a.category.localeCompare(b.category);
+      try {
+        const aiResponse = await aiClient.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+        });
+        
+        let responseText = typeof aiResponse.text === 'function' ? aiResponse.text() : aiResponse.text;
+        responseText = responseText || '';
+        
+        // Extrace JSON using regex block if there is surrounding markdown
+        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          responseText = jsonMatch[0];
+        } else {
+           responseText = responseText.replace(/^\`\`\`json\n?/, '').replace(/\n?\`\`\`$/, '');
+        }
+        
+        groceryList = JSON.parse(responseText.trim());
+        
+        // Ensure strictly categorized
+        groceryList = groceryList.map(item => {
+          const allowedCategories = ['Produce', 'Dairy', 'Pantry', 'Proteins', 'Other'];
+          return {
+             ...item,
+             category: allowedCategories.includes(item.category) ? item.category : 'Other',
+             amount: item.amount.toString()
+          };
+        });
+      } catch (aiError) {
+        require('fs').writeFileSync('debug_grocery_ai.txt', 'Error: ' + aiError.message + '\nStack: ' + aiError.stack);
+        console.error('AI Grocery List Generation Failed:', aiError);
+        return res.status(500).json({ message: 'Failed to intelligently generate grocery list using AI.', error: aiError.message });
       }
-      return a.name.localeCompare(b.name);
-    });
+    } else {
+      return res.status(503).json({ message: 'Gemini API is not configured.' });
+    }
 
     // Group by category for better organization
     const categorizedList = groceryList.reduce((acc, item) => {
@@ -125,10 +133,10 @@ router.post('/generate', auth, async (req, res) => {
 
     const newItems = groceryList.map(item => ({
       _id: `gen_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      name: item.name,
-      amount: item.amount,
+      name: item.name || 'Unknown item',
+      amount: item.amount ? item.amount.toString() : '1',
       unit: item.unit || '',
-      category: item.category,
+      category: item.category || 'Other',
       checked: false,
       addedAt: new Date()
     }));
@@ -150,10 +158,12 @@ router.post('/generate', auth, async (req, res) => {
       }
     });
   } catch (error) {
+    require('fs').writeFileSync('debug_grocery_outer.txt', 'Error: ' + error.message + '\nStack: ' + error.stack);
     console.error('Generate grocery list error:', error);
     res.status(500).json({
       message: 'Server error while generating grocery list',
       error: 'INTERNAL_SERVER_ERROR',
+      details: error.message
     });
   }
 });
