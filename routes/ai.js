@@ -804,7 +804,9 @@ Make sure the recipe is realistic. Return ONLY the JSON.`;
     // Prepare recipe data to return to the client
     const recipeToReturn = savedRecipe
       ? {
+          _id: savedRecipe._id.toString(), // Added _id so frontend detects it as saved
           id: savedRecipe._id.toString(),
+          externalId: savedRecipe.externalId, // Added externalId
           name: savedRecipe.name,
           description: savedRecipe.description || '',
           ingredients: recipeData.ingredients || [], // Keep the original simple ingredient list for display
