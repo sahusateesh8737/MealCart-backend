@@ -11,8 +11,13 @@ const { AppError } = require('./errorHandler');
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 
-// Initialize Supabase client for verifying tokens
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+// Initialize Supabase client defensively
+let supabase = null;
+if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
+  supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+} else {
+  console.warn("⚠️ SUPABASE_URL or SUPABASE_ANON_KEY is missing! Auth will fail.");
+}
 
 /**
  * Verify JWT token and attach user to request
