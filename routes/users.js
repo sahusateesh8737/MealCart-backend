@@ -113,6 +113,74 @@ router.get('/profile', auth, async (req, res) => {
   }
 });
 
+// GET /api/users/stats - Get real user statistics for profile
+router.get('/stats', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    
+    // Calculate real cooking streak based on meal plan dates
+    const mealPlanDates = (user.mealPlan || [])
+      .map(plan => new Date(plan.date).toISOString().split('T')[0])
+      .sort((a, b) => new Date(b) - new Date(a));
+    
+    const uniqueDates = [...new Set(mealPlanDates)];
+    let streak = 0;
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    
+    if (uniqueDates.length > 0) {
+      // Streak continues if there's a meal today OR yesterday
+      let currentCheck = uniqueDates.includes(today) ? today : (uniqueDates.includes(yesterday) ? yesterday : null);
+      
+      if (currentCheck) {
+        streak = 1;
+        // Find the index of the starting date (today or yesterday)
+        let idx = uniqueDates.indexOf(currentCheck);
+        
+        for (let i = idx + 1; i < uniqueDates.length; i++) {
+          const prevDate = new Date(currentCheck);
+          prevDate.setDate(prevDate.getDate() - 1);
+          const expectedDate = prevDate.toISOString().split('T')[0];
+          
+          if (uniqueDates[i] === expectedDate) {
+            streak++;
+            currentCheck = expectedDate;
+          } else {
+            break;
+          }
+        }
+      }
+    }
+
+    // Calculate XP based on activity
+    const activityXP = (user.createdRecipes?.length || 0) * 150 + 
+                     (user.mealPlan?.length || 0) * 45 + 
+                     (user.favoriteRecipes?.length || 0) * 15;
+    
+    // Level calculation (every 1000 XP is a level part)
+    const levelXP = activityXP % 3000;
+    const progress = (levelXP / 3000) * 100;
+
+    res.json({
+      success: true,
+      data: {
+        recipes: user.createdRecipes?.length || 0,
+        favorites: user.favoriteRecipes?.length || 0,
+        mealsPlanned: user.mealPlan?.length || 0,
+        streak: streak,
+        followers: user.followers?.length || 0,
+        following: user.following?.length || 0,
+        xp: activityXP,
+        levelProgress: progress,
+        levelXP: levelXP
+      }
+    });
+  } catch (error) {
+    logger.error('Error in /stats:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch user statistics' });
+  }
+});
+
 // PUT /api/users/profile - Update user profile
 router.put('/profile', auth, async (req, res) => {
   try {
@@ -568,7 +636,13 @@ router.get('/meal-plan', auth, async (req, res) => {
       mealPlan = user.mealPlan.filter((plan) => {
         const planDate = new Date(plan.date);
         const start = startDate ? new Date(startDate) : new Date('1900-01-01');
-        const end = endDate ? new Date(endDate) : new Date('2100-01-01');
+        let end = endDate ? new Date(endDate) : new Date('2100-01-01');
+        
+        // If end date is just a date string (YYYY-MM-DD), make it end of day
+        if (endDate && endDate.length === 10) {
+          end.setUTCHours(23, 59, 59, 999);
+        }
+        
         return planDate >= start && planDate <= end;
       });
     }

@@ -131,7 +131,13 @@ router.post('/', auth, async (req, res) => {
 
     // Convert instructions from array to string if needed
     const formattedInstructions = Array.isArray(instructions)
-      ? instructions.join('\n')
+      ? instructions
+          .map((step, index) => {
+            if (typeof step === "string") return step;
+            const text = step.instruction || step.step || step.text || step.content || JSON.stringify(step);
+            return `${index + 1}. ${text}`;
+          })
+          .join("\n")
       : instructions;
 
     // Normalize difficulty to lowercase
@@ -332,7 +338,13 @@ router.post('/save', auth, async (req, res) => {
 
     // Convert instructions to string if it's an array
     const formattedInstructions = Array.isArray(instructions)
-      ? instructions.join('\n')
+      ? instructions
+          .map((step, index) => {
+            if (typeof step === "string") return step;
+            const text = step.instruction || step.step || step.text || step.content || JSON.stringify(step);
+            return `${index + 1}. ${text}`;
+          })
+          .join("\n")
       : instructions;
 
     // Create new recipe
