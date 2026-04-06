@@ -1,79 +1,123 @@
 const NodeCache = require('node-cache');
 const { logger } = require('./logger');
+const { getRedisClient, isRedisReady } = require('../config/redis');
 
-// Set default TTL to 1 hour (3600 seconds)
-const cache = new NodeCache({ 
+// Local fallback cache
+const localCache = new NodeCache({ 
   stdTTL: 3600, 
   checkperiod: 120,
-  useClones: false // Better for performance if data is not mutated
+  useClones: false 
 });
 
 /**
  * Caching utility with helper methods
+ * Supports Redis (primary) and NodeCache (fallback)
  */
 const cacheUtil = {
   /**
    * Get item from cache
    */
-  get: (key) => {
-    const value = cache.get(key);
-    if (value !== undefined) {
-      // logger.debug(`[Cache Hit] Key: ${key}`);
-      return value;
+  get: async (key) => {
+    try {
+      if (isRedisReady()) {
+        const value = await getRedisClient().get(key);
+        return value ? JSON.parse(value) : null;
+      }
+    } catch (error) {
+      logger.warn(`[Cache] Redis get failed for ${key}, falling back to local.`);
     }
-    return null;
+    
+    const value = localCache.get(key);
+    return value !== undefined ? value : null;
   },
 
   /**
    * Set item in cache
    */
-  set: (key, value, ttl) => {
-    return cache.set(key, value, ttl);
+  set: async (key, value, ttl) => {
+    try {
+      if (isRedisReady()) {
+        const stringValue = JSON.stringify(value);
+        if (ttl) {
+          await getRedisClient().setEx(key, parseInt(ttl), stringValue);
+        } else {
+          await getRedisClient().set(key, stringValue);
+        }
+      }
+    } catch (error) {
+      logger.warn(`[Cache] Redis set failed for ${key}, using local.`);
+    }
+    
+    return localCache.set(key, value, ttl);
   },
 
   /**
    * Delete item from cache
    */
-  del: (key) => {
-    return cache.del(key);
+  del: async (key) => {
+    try {
+      if (isRedisReady()) {
+        await getRedisClient().del(key);
+      }
+    } catch (error) {
+      logger.warn(`[Cache] Redis del failed for ${key}, using local.`);
+    }
+    
+    return localCache.del(key);
   },
 
   /**
-   * Delete items by pattern (regex-like)
+   * Delete items by pattern
    */
-  delPattern: (pattern) => {
-    const keys = cache.keys();
+  delPattern: async (pattern) => {
+    try {
+      if (isRedisReady()) {
+        const client = getRedisClient();
+        const keys = await client.keys(pattern.replace(/\.\*/g, '*'));
+        if (keys.length > 0) {
+          await client.del(keys);
+        }
+      }
+    } catch (error) {
+      logger.warn(`[Cache] Redis delPattern failed for ${pattern}, using local.`);
+    }
+
+    const keys = localCache.keys();
     const regex = new RegExp(pattern);
     const keysToDelete = keys.filter(k => regex.test(k));
     if (keysToDelete.length > 0) {
-      cache.del(keysToDelete);
-      logger.info(`[Cache] Invalidated ${keysToDelete.length} keys matching pattern: ${pattern}`);
+      localCache.del(keysToDelete);
     }
   },
 
   /**
    * Clear all cache
    */
-  flush: () => {
-    return cache.flushAll();
+  flush: async () => {
+    try {
+      if (isRedisReady()) {
+        await getRedisClient().flushDb();
+      }
+    } catch (error) {
+      logger.warn('[Cache] Redis flush failed, using local.');
+    }
+    
+    return localCache.flushAll();
   },
 
   /**
    * Get or Fetch pattern: Try to get from cache, otherwise fetch and cache
-   * @param {string} key - Cache key
-   * @param {Function} fetchFn - Async function to fetch data
-   * @param {number} ttl - Optional TTL in seconds
    */
   getOrFetch: async (key, fetchFn, ttl) => {
-    const cachedData = cache.get(key);
-    if (cachedData !== undefined) {
+    const cachedData = await cacheUtil.get(key);
+    if (cachedData !== null) {
       return cachedData;
     }
 
     try {
       const freshData = await fetchFn();
       if (freshData !== undefined && freshData !== null) {
-        cache.set(key, freshData, ttl);
+        await cacheUtil.set(key, freshData, ttl);
       }
       return freshData;
     } catch (error) {
@@ -86,28 +130,32 @@ const cacheUtil = {
    * Middleware to cache responses for specific routes
    */
   middleware: (ttl) => {
-    return (req, res, next) => {
+    return async (req, res, next) => {
       // Only cache GET requests
       if (req.method !== 'GET') {
         return next();
       }
 
       const key = `__express__${req.originalUrl || req.url}__uID:${req.user?._id || 'guest'}`;
-      const cachedResponse = cache.get(key);
-
-      if (cachedResponse) {
-        return res.json(cachedResponse);
-      } else {
-        res.originalJson = res.json;
-        res.json = (body) => {
-          // Only cache successful responses
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            cache.set(key, body, ttl);
-          }
-          res.originalJson(body);
-        };
-        next();
+      
+      try {
+        const cachedResponse = await cacheUtil.get(key);
+        if (cachedResponse) {
+          return res.json(cachedResponse);
+        }
+      } catch (error) {
+        logger.warn('[Cache] Middleware get failed, proceeding without cache.');
       }
+
+      res.originalJson = res.json;
+      res.json = async (body) => {
+        // Only cache successful responses
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          await cacheUtil.set(key, body, ttl);
+        }
+        res.originalJson(body);
+      };
+      next();
     };
   }
 };

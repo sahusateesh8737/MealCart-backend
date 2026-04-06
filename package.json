@@ -48,6 +48,7 @@
     "mongoose": "^8.0.3",
     "node-cache": "^5.1.2",
     "node-fetch": "^3.3.2",
+    "redis": "^5.11.0",
     "serverless-http": "^3.2.0",
     "winston": "^3.18.3",
     "winston-daily-rotate-file": "^4.7.1"

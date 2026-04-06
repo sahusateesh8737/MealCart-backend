@@ -70,10 +70,12 @@ function createApp() {
 
   // Health check endpoint (no auth required)
   app.get('/health', (req, res) => {
+    const { isRedisReady } = require('./config/redis');
     res.status(200).json({
       success: true,
       message: 'MealCart Backend API is healthy',
       timestamp: new Date().toISOString(),
+      redis: isRedisReady() ? 'connected' : 'disconnected (using local memory)',
       environment: config.env,
       version: '1.0.0',
     });
