@@ -7,6 +7,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const config = require('../config');
 const { AppError } = require('./errorHandler');
+const cache = require('../utils/cache');
 
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
@@ -42,8 +43,13 @@ const authRequired = async (req, res, next) => {
       
       if (error || !supabaseUser) throw error || new Error("User not found in Supabase");
 
-      // Look up User in MongoDB by email
-      let user = await User.findOne({ email: supabaseUser.email }).select('-password');
+      // Look up User in MongoDB by email - CACHED for performance (30 mins)
+      const cacheKey = `user_auth_${supabaseUser.email}`;
+      let user = await cache.getOrFetch(cacheKey, async () => {
+        const u = await User.findOne({ email: supabaseUser.email }).select('-password').lean();
+        if (u) u.id = u._id.toString(); // Add id virtual compatibility
+        return u;
+      }, 1800); // 30 minutes
 
       if (!user) {
         // Auto-create user if they signed up via Supabase but don't exist in MongoDB
@@ -101,7 +107,12 @@ const optionalAuth = async (req, res, next) => {
       const { data: { user: supabaseUser }, error } = await supabase.auth.getUser(token);
       
       if (!error && supabaseUser) {
-        let user = await User.findOne({ email: supabaseUser.email }).select('-password');
+        const cacheKey = `user_auth_${supabaseUser.email}`;
+        let user = await cache.getOrFetch(cacheKey, async () => {
+          const u = await User.findOne({ email: supabaseUser.email }).select('-password').lean();
+          if (u) u.id = u._id.toString(); // Add id virtual compatibility
+          return u;
+        }, 1800); // 30 minutes
         if (user) {
           req.user = user;
           req.userId = user._id;

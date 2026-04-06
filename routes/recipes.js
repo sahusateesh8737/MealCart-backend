@@ -3,6 +3,7 @@ const Recipe = require('../models/Recipe');
 const { auth } = require('../middleware/auth');
 const { searchRecipes, getTrendingRecipes } = require('../controllers/recipeController');
 const { logger } = require('../utils/logger');
+const cache = require('../utils/cache');
 
 const router = express.Router();
 
@@ -18,12 +19,24 @@ router.get('/my-recipes', auth, async (req, res) => {
       limit = 10000; // Effectively "all" - set to very large number
     }
 
-    console.log(`[My Recipes] Request from user: ${userId} (Original: ${req.user._id})`);
-
-    const recipes = await Recipe.find({ userId })
+    console.log(`[My Recipes] Request from user: ${req.userId} (Original: ${req.user?._id})`);
+    
+    // Fetch recipes using the cached userId from the auth middleware
+    const recipesData = await Recipe.find({ userId: req.userId })
       .sort({ createdAt: -1 })
       .limit(limit)
-      .populate('userId', 'username email');
+      .select('name image cookingTime difficulty nutrition isFavorite isAIGenerated authorName authorImage createdAt')
+      .lean();
+
+    // Map the cached user info instead of using .populate() to save another DB trip
+    const recipes = recipesData.map(r => ({
+        ...r,
+        userId: {
+            _id: req.user._id,
+            username: req.user.username,
+            profileImage: req.user.profileImage
+        }
+    }));
 
     console.log(`[My Recipes] Found ${recipes.length} recipes for user ${userId}`);
 
@@ -187,6 +200,8 @@ router.post('/', auth, async (req, res) => {
         fiber: 0,
       },
       userId: req.user._id,
+      authorName: req.user.username,
+      authorImage: req.user.profileImage || '',
       source: 'user_created',
       isAIGenerated: false,
     });
@@ -356,6 +371,8 @@ router.post('/save', auth, async (req, res) => {
       ingredients: formattedIngredients,
       instructions: formattedInstructions,
       userId: req.user._id,
+      authorName: req.user.username,
+      authorImage: req.user.profileImage || '',
       cookingTime: cookingTime || null,
       preparationTime: preparationTime || null,
       servings: servings || 1,
@@ -449,7 +466,8 @@ router.get('/saved/:userId', auth, async (req, res) => {
       .sort({ [sortBy]: sortOrder })
       .skip(skip)
       .limit(parseInt(limit))
-      .populate('userId', 'username email');
+      .select('name image cookingTime difficulty nutrition isFavorite isAIGenerated authorName authorImage createdAt')
+      .populate('userId', 'username profileImage');
 
     const totalRecipes = await Recipe.countDocuments({ userId });
 

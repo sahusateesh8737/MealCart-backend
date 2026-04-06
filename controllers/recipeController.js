@@ -1,4 +1,6 @@
 const Recipe = require('../models/Recipe');
+const User = require('../models/User');
+const cache = require('../utils/cache');
 
 // Search recipes (Internal/Local only now)
 const searchRecipes = async (req, res) => {
@@ -18,9 +20,9 @@ const searchRecipes = async (req, res) => {
     // Build the query object
     const queryObj = { isPublic: true }; // Only return public recipes by default unless user owns them
 
-    // Text-based search (Name/Title)
+    // Text-based search (Optimized with Text Index)
     if (query) {
-      queryObj.name = { $regex: query.toString(), $options: 'i' };
+      queryObj.$text = { $search: query.toString() };
     }
 
     // Ingredient-based search
@@ -98,16 +100,37 @@ const searchRecipes = async (req, res) => {
   }
 };
 
-// Get trending/popular recipes (Internal/Local only now)
+// Get trending/popular recipes (Optimized with Caching)
 const getTrendingRecipes = async (req, res) => {
   try {
-    // Return empty result for now
+    const cacheKey = 'trending_recipes_global';
+    
+    const trendingRecipes = await cache.getOrFetch(cacheKey, async () => {
+      // Logic: Most recently created public recipes with a rating
+      // In a real app, this would be based on views/likes/saves
+      const recipes = await Recipe.find({ isPublic: true })
+        .sort({ rating: -1, createdAt: -1 })
+        .limit(12)
+        .select('name image cookingTime difficulty nutrition rating authorName authorImage')
+        .lean();
+        
+      return recipes.map(recipe => ({
+        id: recipe._id.toString(),
+        title: recipe.name,
+        image: recipe.image,
+        readyInMinutes: recipe.cookingTime,
+        rating: recipe.rating,
+        difficulty: recipe.difficulty,
+        authorName: recipe.authorName
+      }));
+    }, 3600); // Cache for 1 hour
+
     res.json({
       success: true,
-      message: 'Trending recipes feature is currently disabled.',
-      data: [],
+      message: 'Fetched trending recipes from cache/db',
+      data: trendingRecipes,
       pagination: {
-        total: 0,
+        total: trendingRecipes.length,
         page: 1,
         limit: 12,
         hasNextPage: false,
@@ -204,6 +227,8 @@ const saveRecipe = async (req, res) => {
       cuisine: recipeData.cuisine || 'International',
       servings: recipeData.servings || 4,
       userId: userId,
+      authorName: req.user?.username || 'Gourmet Chef',
+      authorImage: req.user?.profileImage || '',
       isPublic: false,
       source: recipeData.source || (recipeData.isAIGenerated ? 'ai_generation' : 'user_created'),
       isAIGenerated: recipeData.isAIGenerated || false,

@@ -56,6 +56,18 @@ function createApp() {
     });
   }
 
+  // PERFORMANCE MONITORING - Log requests slower than 100ms
+  app.use((req, res, next) => {
+    const start = Date.now();
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      if (duration >= 100) {
+        console.warn(`⚠️  [Slow Request] ${req.method} ${req.originalUrl || req.url} - ${duration}ms`);
+      }
+    });
+    next();
+  });
+
   // Health check endpoint (no auth required)
   app.get('/health', (req, res) => {
     res.status(200).json({

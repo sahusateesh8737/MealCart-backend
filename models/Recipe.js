@@ -141,11 +141,32 @@ const recipeSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  // Denormalized fields for performance
+  authorName: String,
+  authorImage: String,
 });
 
 // Compound index for user-specific queries
 recipeSchema.index({ userId: 1, createdAt: -1 });
-recipeSchema.index({ userId: 1, name: 'text' });
+recipeSchema.index({ userId: 1, name: 'text' }); // Legacy text index
+// GLOBAL TEXT SEARCH INDEX (Optimized)
+recipeSchema.index({ 
+  name: 'text', 
+  description: 'text', 
+  'ingredients.name': 'text' 
+}, {
+  name: 'GlobalSearchIndex',
+  weights: {
+    name: 10,
+    description: 5,
+    'ingredients.name': 2
+  }
+});
+
+// Optimization indexes
+recipeSchema.index({ cuisine: 1, difficulty: 1 });
+recipeSchema.index({ userId: 1, isFavorite: 1 });
+
 // Index for AI search optimization
 recipeSchema.index({ searchQuery: 1 });
 recipeSchema.index({ 'ingredients.name': 1 }); // Improve findByIngredients performance

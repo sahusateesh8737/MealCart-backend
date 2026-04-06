@@ -187,6 +187,11 @@ const userSchema = new mongoose.Schema(
   }
 );
 
+// Indexes
+userSchema.index({ dietaryPreferences: 1 });
+userSchema.index({ 'mealPlan.date': 1 });
+userSchema.index({ 'pantry.expirationDate': 1 });
+
 // Virtual for follower count
 userSchema.virtual('followerCount').get(function () {
   return this.followers ? this.followers.length : 0;
@@ -228,5 +233,35 @@ userSchema.methods.toJSON = function () {
   delete user.password;
   return user;
 };
+
+/**
+ * Sync denormalized data to recipes on profile update
+ */
+userSchema.pre('save', function (next) {
+  // Only trigger sync if relevant profile fields are modified
+  this._isAuthorSyncRequired = this.isModified('username') || this.isModified('profileImage');
+  next();
+});
+
+userSchema.post('save', async function (doc) {
+  // Skip if no relevant fields changed (prevents slow meal plan updates, etc.)
+  if (!this._isAuthorSyncRequired) return;
+
+  try {
+    const Recipe = mongoose.model('Recipe');
+    await Recipe.updateMany(
+      { userId: doc._id },
+      { 
+        $set: { 
+          authorName: doc.username,
+          authorImage: doc.profileImage || ''
+        } 
+      }
+    );
+    console.log(`[Sync] Updated denormalized author info for user: ${doc.username}`);
+  } catch (error) {
+    console.error('[Sync Error] Failed to update recipes for user:', doc._id, error);
+  }
+});
 
 module.exports = mongoose.model('User', userSchema);

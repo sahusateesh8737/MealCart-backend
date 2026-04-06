@@ -257,14 +257,10 @@ router.get('/favorites', auth, async (req, res) => {
       userAgent: req.headers['user-agent']?.substring(0, 50),
     });
 
-    const user = await User.findById(req.user.id);
-
+    const user = req.user;
+    
     if (!user) {
-      console.log('[Favorites] User not found:', req.user.id);
-      return res.status(404).json({
-        success: false,
-        message: 'User not found',
-      });
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
 
     // Get total count before pagination
@@ -278,29 +274,23 @@ router.get('/favorites', auth, async (req, res) => {
         : [],
     });
 
-    // Populate favorites with pagination
-    await user.populate({
-      path: 'favoriteRecipes',
-      select: '-__v',
-      options: {
-        skip: skip,
-        limit: limit,
-        sort: { createdAt: -1 },
-        strictPopulate: false,
-      },
-    });
+    // Fetch favorites directly from Recipe collection (Much faster than user.populate)
+    const recipes = await Recipe.find({ _id: { $in: user.favoriteRecipes } })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .select('name image cookingTime difficulty nutrition isFavorite isAIGenerated authorName authorImage createdAt')
+      .lean();
 
-    const populatedRecipes = user.favoriteRecipes || [];
-    console.log('[Favorites] Populated recipes:', {
+    console.log('[Favorites] Found optimized recipes:', {
       userId: req.user.id,
-      populatedCount: populatedRecipes.length,
-      recipeNames: populatedRecipes.slice(0, 3).map((r) => r?.name || 'unnamed'),
+      count: recipes.length,
     });
 
-    const response = {
+    res.json({
       success: true,
       data: {
-        recipes: populatedRecipes,
+        recipes,
         pagination: {
           currentPage: page,
           totalPages: Math.ceil(totalFavorites / limit),
@@ -308,26 +298,35 @@ router.get('/favorites', auth, async (req, res) => {
           limit: limit,
         },
       },
-    };
-
-    console.log('[Favorites] Sending response:', {
-      userId: req.user.id,
-      recipesCount: response.data.recipes.length,
-      paginationInfo: response.data.pagination,
     });
-
-    res.json(response);
   } catch (error) {
     console.error('[Favorites] Error:', {
       userId: req.user?.id,
       error: error.message,
-      stack: error.stack?.substring(0, 200),
     });
     res.status(500).json({
       success: false,
       message: 'Error fetching favorites',
       error: error.message,
     });
+  }
+});
+
+// GET /api/users/favorites/ids - Get only the IDs of user's favorite recipes (Ultra-fast)
+router.get('/favorites/ids', auth, async (req, res) => {
+  try {
+    const user = req.user;
+    
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    res.json({
+      success: true,
+      favoriteIds: user.favoriteRecipes || []
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error fetching favorite IDs' });
   }
 });
 
@@ -624,32 +623,56 @@ router.get('/meal-plan', auth, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
 
-    const user = await User.findById(req.user.id).populate({
-      path: 'mealPlan.breakfast mealPlan.lunch mealPlan.dinner mealPlan.snacks',
-      select: 'name images cookingTime prepTime difficulty averageRating',
-    });
+    // Optmized fetching: already have user in req from auth middleware
+    const user = req.user;
+    let mealPlan = user.mealPlan || [];
 
-    let mealPlan = user.mealPlan;
-
-    // Filter by date range if provided
+    // Filter by date range if provided (do this early before database fetching)
     if (startDate || endDate) {
-      mealPlan = user.mealPlan.filter((plan) => {
+      const start = startDate ? new Date(startDate) : new Date('1900-01-01');
+      const end = endDate ? new Date(endDate) : new Date('2100-01-01');
+      if (endDate && endDate.length === 10) end.setUTCHours(23, 59, 59, 999);
+
+      mealPlan = mealPlan.filter((plan) => {
         const planDate = new Date(plan.date);
-        const start = startDate ? new Date(startDate) : new Date('1900-01-01');
-        let end = endDate ? new Date(endDate) : new Date('2100-01-01');
-        
-        // If end date is just a date string (YYYY-MM-DD), make it end of day
-        if (endDate && endDate.length === 10) {
-          end.setUTCHours(23, 59, 59, 999);
-        }
-        
         return planDate >= start && planDate <= end;
       });
     }
 
+    // Collect all recipe IDs to fetch in one round-trip
+    const recipeIds = new Set();
+    mealPlan.forEach(plan => {
+      if (plan.breakfast) recipeIds.add(plan.breakfast.toString());
+      if (plan.lunch) recipeIds.add(plan.lunch.toString());
+      if (plan.dinner) recipeIds.add(plan.dinner.toString());
+      if (plan.snacks && plan.snacks.length > 0) {
+        plan.snacks.forEach(id => recipeIds.add(id.toString()));
+      }
+    });
+
+    // Fetch all related recipes at once (projected fields only)
+    const recipes = await Recipe.find({ _id: { $in: Array.from(recipeIds) } })
+      .select('name image cookingTime preparationTime difficulty nutrition')
+      .lean();
+
+    // Map recipes by ID for easy lookup
+    const recipeMap = recipes.reduce((map, r) => {
+      map[r._id.toString()] = r;
+      return map;
+    }, {});
+
+    // Map recipes back into the filtered meal plan structure
+    const populatedMealPlan = mealPlan.map(plan => ({
+      ...plan,
+      breakfast: plan.breakfast ? recipeMap[plan.breakfast.toString()] : null,
+      lunch: plan.lunch ? recipeMap[plan.lunch.toString()] : null,
+      dinner: plan.dinner ? recipeMap[plan.dinner.toString()] : null,
+      snacks: (plan.snacks || []).map(id => recipeMap[id.toString()]).filter(Boolean),
+    }));
+
     res.json({
       success: true,
-      data: mealPlan.sort((a, b) => new Date(a.date) - new Date(b.date)),
+      data: populatedMealPlan.sort((a, b) => new Date(a.date) - new Date(b.date)),
     });
   } catch (error) {
     console.error('Error fetching meal plan:', error);
