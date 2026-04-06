@@ -41,7 +41,7 @@ const parseNutritionFromText = (nutritionText) => {
   const proteinMatch = nutritionText.match(/protein[:\s]*(\d+(?:\.\d+)?)/i);
   const carbsMatch = nutritionText.match(/carb(?:ohydrate)?s?[:\s]*(\d+(?:\.\d+)?)/i);
   const fatMatch = nutritionText.match(/fat[:\s]*(\d+(?:\.\d+)?)/i);
-  const fiberMatch = nutritionText.match(/fiber[:\s]*(\d+(?:\.\d+)?)/i);
+  const fiberMatch = nutritionText.match(/fib(?:er|re)[:\s]*(\d+(?:\.\d+)?)/i);
   const sugarMatch = nutritionText.match(/sugar[:\s]*(\d+(?:\.\d+)?)/i);
   const sodiumMatch = nutritionText.match(/sodium[:\s]*(\d+(?:\.\d+)?)/i);
 
@@ -231,46 +231,21 @@ router.post('/generate-recipe', auth, async (req, res) => {
     ];
     const allExclusions = [...new Set([...excludeIngredients, ...userAllergens])];
 
-    const prompt = `Create a ${difficulty} ${cuisine || 'international'} ${mealType} recipe using these ingredients: ${ingredients.join(', ')}.
+    const prompt = `Create a ${difficulty} ${cuisine || 'Indian'} ${mealType} recipe using these ingredients: ${ingredients.join(', ')}.
+
+IMPORTANT: Use Indian English in your response (standard in India, use British/UK spelling). e.g., use 'flavour' instead of 'flavor', 'savoury' instead of 'savory', 'starter' instead of 'appetizer', 'fibre' instead of 'fiber'. Use 'Veg/Non-Veg' classification if relevant.
 
 SERVINGS: ${servings}
-COOKING TIME: ~${cookingTime} minutes
-MEAL TYPE: ${mealType}
-${allDietaryRestrictions.length > 0 ? `DIETARY RESTRICTIONS: ${allDietaryRestrictions.join(', ')}` : ''}
-${allExclusions.length > 0 ? `EXCLUDE THESE: ${allExclusions.join(', ')}` : ''}
-
-IMPORTANT: Return ONLY valid JSON without any markdown formatting, explanations, or additional text. 
-
+...
 Respond with this exact JSON structure:
 {
-  "title": "Recipe Name",
-  "description": "Brief description of the dish",
-  "ingredients": [
-    {
-      "name": "ingredient name",
-      "amount": 1,
-      "unit": "cup",
-      "notes": "optional notes"
-    }
-  ],
-  "instructions": [
-    {
-      "step": 1,
-      "instruction": "Detailed instruction",
-      "time": 5
-    }
-  ],
-  "cookingTime": 30,
-  "prepTime": 15,
-  "difficulty": "${difficulty}",
-  "cuisine": "${cuisine || 'International'}",
-  "dietaryTags": ["vegetarian", "gluten-free"],
-  "category": "${mealType}",
-  "nutritionInfo": "Calories: 400, Protein: 20g, Carbs: 45g, Fat: 15g, Fiber: 8g",
-  "tips": "Optional cooking tips"
+  "title": "Recipe Name (Indian English)",
+  "description": "Brief description of the dish (using 'flavour', 'savoury', etc.)",
+...
+  "nutritionInfo": "Calories: 400, Protein: 20g, Carbs: 45g, Fat: 15g, Fibre: 8g",
+  "tips": "Optional cooking tips (using Indian English)"
 }
-
-Make sure the recipe is realistic, balanced, and follows all dietary restrictions. Include proper cooking techniques and timing.`;
+...`;
 
     // Call AI with retry logic using new SDK and gemini-2.5-flash
     const aiStartTime = Date.now();
@@ -397,7 +372,7 @@ router.post('/chat', auth, async (req, res) => {
 - Grocery shopping suggestions
 - Food safety and storage
 
-Be conversational, helpful, and concise. If the question is not related to cooking or food, politely redirect to food-related topics.
+Use Indian English terminology (e.g., flavour, savoury, starter) and adopt UK spelling conventions which are standard in India. Be conversational, helpful, and concise. If the question is not related to cooking or food, politely redirect to food-related topics.
 
 `;
 
